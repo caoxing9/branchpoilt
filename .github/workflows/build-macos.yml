@@ -1,27 +1,15 @@
-name: Build macOS
+name: CI
 
 on:
-  push:
-    tags: ["v*"]
-  workflow_dispatch:
+  pull_request:
+    branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  build-macos:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: aarch64-apple-darwin
-            runner: macos-latest
-            arch: arm64
-          - target: x86_64-apple-darwin
-            runner: macos-13
-            arch: x64
-
-    runs-on: ${{ matrix.runner }}
+  build-check:
+    runs-on: macos-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,13 +17,12 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: aarch64-apple-darwin
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-          key: ${{ matrix.target }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -48,18 +35,9 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build Tauri app and create release
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "BranchPilot ${{ github.ref_name }}"
-          releaseBody: |
-            See the assets below to download and install BranchPilot.
+      - name: Build frontend
+        run: pnpm build
 
-            - **arm64.dmg** — Apple Silicon (M1/M2/M3/M4)
-            - **x64.dmg** — Intel Mac
-          releaseDraft: true
-          prerelease: false
-          args: --target ${{ matrix.target }}
+      - name: Check Rust
+        working-directory: src-tauri
+        run: cargo check --target aarch64-apple-darwin
