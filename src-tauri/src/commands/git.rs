@@ -45,3 +45,32 @@ pub fn create_worktree(
     let _ = app.emit("environment-updated", ());
     Ok(())
 }
+
+#[tauri::command]
+pub fn open_in_vscode(path: String) -> Result<(), String> {
+    let dir = std::path::Path::new(&path);
+    // Look for a .code-workspace file in the worktree root so VS Code
+    // opens the multi-root workspace directly instead of a plain folder.
+    let workspace_file = std::fs::read_dir(dir)
+        .ok()
+        .and_then(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .find(|e| {
+                    e.path()
+                        .extension()
+                        .map_or(false, |ext| ext == "code-workspace")
+                })
+                .map(|e| e.path())
+        });
+
+    let target = workspace_file
+        .as_deref()
+        .unwrap_or(dir);
+
+    std::process::Command::new("code")
+        .arg(target)
+        .spawn()
+        .map_err(|e| format!("Failed to open VS Code: {}", e))?;
+    Ok(())
+}

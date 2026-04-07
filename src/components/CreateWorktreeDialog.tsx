@@ -50,6 +50,16 @@ export function CreateWorktreeDialog({ onClose, onCreated }: CreateWorktreeDialo
     inputRef.current?.focus();
   }, []);
 
+  // Auto-close when done
+  useEffect(() => {
+    if (!done) return;
+    const timer = setTimeout(() => {
+      onCreated();
+      onClose();
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [done]);
+
   useEffect(() => {
     if (!creating || !branchName) return;
 
@@ -239,23 +249,9 @@ export function CreateWorktreeDialog({ onClose, onCreated }: CreateWorktreeDialo
             })}
 
             {done && (
-              <button
-                onClick={handleDone}
-                style={{
-                  marginTop: 12,
-                  padding: "6px 14px",
-                  background: "var(--accent)",
-                  color: "var(--accent-on)",
-                  borderRadius: 6,
-                  fontSize: 12,
-                  fontWeight: 600,
-                  border: "none",
-                  cursor: "pointer",
-                  alignSelf: "flex-end",
-                }}
-              >
-                Done
-              </button>
+              <div style={{ marginTop: 8, fontSize: 11, color: "var(--text-secondary)", textAlign: "right" }}>
+                Closing...
+              </div>
             )}
           </div>
         )}

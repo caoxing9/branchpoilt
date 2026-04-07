@@ -41,6 +41,10 @@ export async function createWorktree(branchName: string): Promise<void> {
   return invoke("create_worktree", { branchName });
 }
 
+export async function openInVscode(path: string): Promise<void> {
+  return invoke("open_in_vscode", { path });
+}
+
 /** Generate a preview URL using *.localhost subdomain for cookie isolation. */
 export function previewUrl(branchName: string, port: number): string {
   const slug = branchName

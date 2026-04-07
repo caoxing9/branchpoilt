@@ -29,6 +29,7 @@ pub fn run() {
             commands::git::list_branches,
             commands::git::remove_worktree,
             commands::git::create_worktree,
+            commands::git::open_in_vscode,
             commands::service::start_branch,
             commands::service::stop_branch,
             commands::service::get_environments,

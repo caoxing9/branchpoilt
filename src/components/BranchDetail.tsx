@@ -4,7 +4,7 @@ import type { Branch, DevCategory } from "../lib/types";
 import { DEV_CATEGORIES } from "../lib/types";
 import { StatusBadge } from "./StatusBadge";
 import { CategoryPicker } from "./CategoryPicker";
-import { startBranch, stopBranch, getBranchLogs } from "../lib/commands";
+import { startBranch, stopBranch, getBranchLogs, removeBranch, openInVscode } from "../lib/commands";
 import { AnsiLine } from "./AnsiLine";
 
 interface BranchDetailProps {
@@ -24,6 +24,8 @@ export function BranchDetail({
 }: BranchDetailProps) {
   const [logs, setLogs] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const logRef = useRef<HTMLDivElement>(null);
@@ -82,6 +84,21 @@ export function BranchDetail({
     }
   }
 
+  async function handleDelete() {
+    setDeleting(true);
+    setError(null);
+    try {
+      await removeBranch(branch.name);
+      onRefresh();
+      onBack();
+    } catch (e) {
+      setError(String(e));
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  }
+
+  const hasWorktree = !!(worktreePath || branch.worktreePath);
   const catInfo = DEV_CATEGORIES[devCategory];
 
   return (
@@ -157,6 +174,69 @@ export function BranchDetail({
               ? "Stop"
               : "Start"}
         </button>
+        {hasWorktree && (
+          <button
+            onClick={() => {
+              const wt = worktreePath ?? branch.worktreePath;
+              if (wt) openInVscode(wt);
+            }}
+            style={{
+              padding: "4px 12px",
+              background: "var(--accent-dim)",
+              color: "var(--accent)",
+              borderRadius: 4,
+              fontSize: 12,
+            }}
+          >
+            VS Code
+          </button>
+        )}
+        {hasWorktree && (
+          confirmDelete ? (
+            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+              <span style={{ fontSize: 11, color: "var(--status-error)" }}>Delete?</span>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                style={{
+                  padding: "4px 8px",
+                  background: "var(--status-error)",
+                  color: "#fff",
+                  borderRadius: 4,
+                  fontSize: 11,
+                  opacity: deleting ? 0.5 : 1,
+                }}
+              >
+                {deleting ? "..." : "Yes"}
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                style={{
+                  padding: "4px 8px",
+                  background: "var(--bg-card)",
+                  color: "var(--text-secondary)",
+                  borderRadius: 4,
+                  fontSize: 11,
+                }}
+              >
+                No
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              style={{
+                padding: "4px 8px",
+                background: "var(--status-error)22",
+                color: "var(--status-error)",
+                borderRadius: 4,
+                fontSize: 12,
+              }}
+            >
+              Delete
+            </button>
+          )
+        )}
       </div>
 
       {/* Info panel */}

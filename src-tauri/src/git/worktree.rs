@@ -67,7 +67,7 @@ fn generate_env_file(
     db_name: &str,
 ) -> Result<(), String> {
     let port = 3000 + slot * 100;
-    let socket_port = port + 1;
+    let socket_port = port + 3;
     let server_port = port + 3;
     let redis_db = slot;
 
@@ -284,6 +284,13 @@ pub fn remove_worktree(repo_path: &Path, branch_name: &str) -> Result<(), String
 
                 if !output.status.success() {
                     let stderr = String::from_utf8_lossy(&output.stderr);
+                    // Directory exists but git doesn't track it as a worktree anymore;
+                    // fall back to plain directory removal.
+                    if stderr.contains("is not a working tree") {
+                        std::fs::remove_dir_all(path)
+                            .map_err(|e| format!("Failed to remove worktree directory: {}", e))?;
+                        return Ok(());
+                    }
                     return Err(format!("git worktree remove failed: {}", stderr));
                 }
                 return Ok(());
