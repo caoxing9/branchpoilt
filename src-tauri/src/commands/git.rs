@@ -91,6 +91,7 @@ pub fn open_in_vscode(path: String) -> Result<(), String> {
         .unwrap_or(dir);
 
     std::process::Command::new("code")
+        .env("PATH", crate::shell::user_path())
         .arg(target)
         .spawn()
         .map_err(|e| format!("Failed to open VS Code: {}", e))?;

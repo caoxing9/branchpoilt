@@ -1,6 +1,7 @@
 mod commands;
 mod git;
 mod process;
+pub mod shell;
 mod state;
 mod tray;
 mod watcher;

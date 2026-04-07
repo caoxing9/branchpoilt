@@ -4,6 +4,7 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use tauri::{AppHandle, Emitter, Manager};
 
+use crate::shell;
 use crate::state::{SharedState, Status};
 
 extern crate libc;
@@ -131,8 +132,7 @@ fn ensure_dependencies(worktree_path: &Path) -> Result<(), String> {
     let pm = detect_package_manager(worktree_path);
     let install_cmd = format!("{} install", pm);
 
-    let output = Command::new("sh")
-        .args(["-c", &install_cmd])
+    let output = shell::shell_command(&install_cmd)
         .current_dir(worktree_path)
         .output()
         .map_err(|e| format!("Failed to install deps: {}", e))?;
@@ -156,9 +156,8 @@ fn spawn_process(
     eprintln!("[BranchPilot] spawn: branch={}, label={}, cmd='{}', dir={}, port={}",
         branch_name, cmd.label, cmd.command, worktree_path.display(), cmd.port);
 
-    let mut command = Command::new("sh");
-    command.args(["-c", &cmd.command])
-        .current_dir(worktree_path)
+    let mut command = shell::shell_command(&cmd.command);
+    command.current_dir(worktree_path)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
@@ -425,6 +424,7 @@ pub fn create_database_with_template(
 
     // Check if database already exists
     let check = Command::new("psql")
+        .env("PATH", shell::user_path())
         .args([admin_url_clean, "-tAc",
             &format!("SELECT 1 FROM pg_database WHERE datname = '{}'", new_db_name)])
         .output()
@@ -436,6 +436,7 @@ pub fn create_database_with_template(
         eprintln!("[BranchPilot] Creating database '{}' from template '{}'", new_db_name, template_db_name);
 
         let create = Command::new("psql")
+            .env("PATH", shell::user_path())
             .args([admin_url_clean, "-c",
                 &format!("CREATE DATABASE \"{}\" TEMPLATE \"{}\"", new_db_name, template_db_name)])
             .output()
@@ -446,6 +447,7 @@ pub fn create_database_with_template(
             if stderr.contains("being accessed by other users") {
                 eprintln!("[BranchPilot] Template db '{}' in use, creating empty database '{}'", template_db_name, new_db_name);
                 let create_empty = Command::new("psql")
+                    .env("PATH", shell::user_path())
                     .args([admin_url_clean, "-c",
                         &format!("CREATE DATABASE \"{}\"", new_db_name)])
                     .output()
@@ -475,6 +477,7 @@ pub fn ensure_database_exists(db_url: &str) -> Result<String, String> {
     let admin_url_clean = admin_url.split('?').next().unwrap_or(&admin_url);
 
     let check = Command::new("psql")
+        .env("PATH", shell::user_path())
         .args([admin_url_clean, "-tAc",
             &format!("SELECT 1 FROM pg_database WHERE datname = '{}'", db_name)])
         .output()
@@ -485,6 +488,7 @@ pub fn ensure_database_exists(db_url: &str) -> Result<String, String> {
     if !exists {
         eprintln!("[BranchPilot] Database '{}' does not exist, creating empty", db_name);
         let create = Command::new("psql")
+            .env("PATH", shell::user_path())
             .args([admin_url_clean, "-c",
                 &format!("CREATE DATABASE \"{}\"", db_name)])
             .output()
