@@ -1,4 +1,4 @@
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 use crate::git::branches::list_local_branches;
 use crate::git::worktree;
@@ -26,5 +26,22 @@ pub fn remove_worktree(branch_name: String, state: State<'_, SharedState>) -> Re
 
     let mut s = state.lock().unwrap();
     s.environments.remove(&branch_name);
+    Ok(())
+}
+
+#[tauri::command(async)]
+pub fn create_worktree(
+    branch_name: String,
+    app: AppHandle,
+    state: State<'_, SharedState>,
+) -> Result<(), String> {
+    let repo_path = {
+        let s = state.lock().unwrap();
+        s.project_path().ok_or("No project path set")?
+    };
+
+    worktree::create_worktree_full(&app, &repo_path, &branch_name)?;
+
+    let _ = app.emit("environment-updated", ());
     Ok(())
 }

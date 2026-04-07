@@ -1,6 +1,6 @@
 use tauri::{AppHandle, Emitter, State};
 
-use crate::state::{AppSettings, SharedState};
+use crate::state::{AppSettings, SettingsStore, SharedState};
 
 #[tauri::command]
 pub fn get_settings(state: State<'_, SharedState>) -> Result<AppSettings, String> {
@@ -24,8 +24,12 @@ pub fn set_project_path(
     s.settings.project_path = Some(path);
     // Reset environments for new project
     s.environments.clear();
-    s.next_port = s.settings.base_port;
+    let settings_clone = s.settings.clone();
     drop(s);
+
+    // Persist to disk
+    SettingsStore::save(&app, &settings_clone)
+        .map_err(|e| format!("Settings saved in memory but failed to persist: {}", e))?;
 
     let _ = app.emit("environment-updated", ());
     Ok(())

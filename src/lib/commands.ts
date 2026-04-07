@@ -36,3 +36,17 @@ export async function setProjectPath(path: string): Promise<void> {
 export async function openPreviewWindow(branches: string[]): Promise<void> {
   return invoke("open_preview_window", { branches });
 }
+
+export async function createWorktree(branchName: string): Promise<void> {
+  return invoke("create_worktree", { branchName });
+}
+
+/** Generate a preview URL using *.localhost subdomain for cookie isolation. */
+export function previewUrl(branchName: string, port: number): string {
+  const slug = branchName
+    .replace(/[^a-zA-Z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .toLowerCase();
+  return `http://${slug}.localhost:${port}`;
+}

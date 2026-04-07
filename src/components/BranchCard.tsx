@@ -1,23 +1,31 @@
 import { useState } from "react";
-import type { Branch } from "../lib/types";
+import { open } from "@tauri-apps/plugin-shell";
+import type { Branch, DevCategory } from "../lib/types";
 import { StatusBadge } from "./StatusBadge";
 import { LogViewer } from "./LogViewer";
-import { startBranch, stopBranch } from "../lib/commands";
+import { CategoryPicker } from "./CategoryPicker";
+import { startBranch, stopBranch, previewUrl } from "../lib/commands";
 
 interface BranchCardProps {
   branch: Branch;
   onRefresh: () => void;
+  devCategory?: DevCategory;
+  onCategoryChange?: (category: DevCategory) => void;
+  onSelect?: () => void;
+  compact?: boolean;
 }
 
-export function BranchCard({ branch, onRefresh }: BranchCardProps) {
+export function BranchCard({ branch, onRefresh, devCategory, onCategoryChange, onSelect, compact }: BranchCardProps) {
   const [loading, setLoading] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const env = branch.environment;
   const status = env?.status ?? "stopped";
   const port = env?.port;
 
   async function handleToggle() {
     setLoading(true);
+    setError(null);
     try {
       if (status === "running" || status === "building") {
         await stopBranch(branch.name);
@@ -26,6 +34,7 @@ export function BranchCard({ branch, onRefresh }: BranchCardProps) {
       }
       onRefresh();
     } catch (e) {
+      setError(String(e));
       console.error(e);
     } finally {
       setLoading(false);
@@ -35,11 +44,17 @@ export function BranchCard({ branch, onRefresh }: BranchCardProps) {
   return (
     <div
       style={{
-        padding: "10px 12px",
+        padding: compact ? "6px 8px" : "10px 12px",
         background: "var(--bg-card)",
         borderRadius: "var(--radius)",
-        marginBottom: 6,
+        marginBottom: compact ? 4 : 6,
         transition: "background 0.15s",
+        cursor: onSelect ? "pointer" : undefined,
+      }}
+      onClick={(e) => {
+        if (onSelect && !(e.target as HTMLElement).closest("button")) {
+          onSelect();
+        }
       }}
     >
       <div
@@ -53,7 +68,7 @@ export function BranchCard({ branch, onRefresh }: BranchCardProps) {
           <div
             style={{
               fontWeight: 600,
-              fontSize: 13,
+              fontSize: compact ? 11 : 13,
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
@@ -108,7 +123,7 @@ export function BranchCard({ branch, onRefresh }: BranchCardProps) {
           {status === "running" && port && (
             <button
               onClick={() =>
-                window.open(`http://localhost:${port}`, "_blank")
+                open(previewUrl(branch.name, port))
               }
               style={{
                 padding: "4px 8px",
@@ -148,6 +163,19 @@ export function BranchCard({ branch, onRefresh }: BranchCardProps) {
         </div>
       </div>
 
+      {/* Category picker — hidden in compact/board mode */}
+      {!compact && devCategory && onCategoryChange && (
+        <div style={{ marginTop: 6 }}>
+          <CategoryPicker value={devCategory} onChange={onCategoryChange} />
+        </div>
+      )}
+
+      {/* Error display */}
+      {error && (
+        <div style={{ padding: "6px 0", color: "var(--status-error)", fontSize: 11, marginTop: 4 }}>
+          {error}
+        </div>
+      )}
       {/* Log viewer */}
       {showLogs && <LogViewer branchName={branch.name} />}
     </div>

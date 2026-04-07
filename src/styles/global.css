@@ -4,7 +4,9 @@
   box-sizing: border-box;
 }
 
-:root {
+/* ── Dark theme (default) ── */
+:root,
+[data-theme="dark"] {
   --bg-primary: #1a1a2e;
   --bg-secondary: #16213e;
   --bg-card: #1e2a45;
@@ -13,12 +15,93 @@
   --text-secondary: #8892b0;
   --accent: #64ffda;
   --accent-dim: #64ffda33;
+  --accent-on: #1a1a2e;
   --status-running: #64ffda;
   --status-stopped: #6c757d;
   --status-building: #ffc107;
   --status-error: #ff6b6b;
   --border: #2a3a5c;
   --radius: 8px;
+
+  /* Log viewer */
+  --log-bg: #0d1117;
+  --log-text: #c9d1d9;
+  --log-text-dim: #484f58;
+  --log-text-muted: #8b949e;
+  --log-backend: #f0883e;
+  --log-frontend: #58a6ff;
+  --log-error: #f85149;
+
+  /* Overlay */
+  --overlay-bg: rgba(0, 0, 0, 0.6);
+
+  color-scheme: dark;
+}
+
+/* ── Light theme ── */
+[data-theme="light"] {
+  --bg-primary: #f5f6f8;
+  --bg-secondary: #ebedf0;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f0f1f3;
+  --text-primary: #1a1a2e;
+  --text-secondary: #5a6377;
+  --accent: #0d9373;
+  --accent-dim: #0d937322;
+  --accent-on: #ffffff;
+  --status-running: #0d9373;
+  --status-stopped: #9ca3af;
+  --status-building: #d97706;
+  --status-error: #dc2626;
+  --border: #d1d5db;
+  --radius: 8px;
+
+  /* Log viewer */
+  --log-bg: #fafbfc;
+  --log-text: #24292f;
+  --log-text-dim: #b0b8c1;
+  --log-text-muted: #57606a;
+  --log-backend: #bf5a15;
+  --log-frontend: #0550ae;
+  --log-error: #cf222e;
+
+  /* Overlay */
+  --overlay-bg: rgba(0, 0, 0, 0.3);
+
+  color-scheme: light;
+}
+
+/* ── System theme ── */
+@media (prefers-color-scheme: light) {
+  [data-theme="system"] {
+    --bg-primary: #f5f6f8;
+    --bg-secondary: #ebedf0;
+    --bg-card: #ffffff;
+    --bg-card-hover: #f0f1f3;
+    --text-primary: #1a1a2e;
+    --text-secondary: #5a6377;
+    --accent: #0d9373;
+    --accent-dim: #0d937322;
+    --accent-on: #ffffff;
+    --status-running: #0d9373;
+    --status-stopped: #9ca3af;
+    --status-building: #d97706;
+    --status-error: #dc2626;
+    --border: #d1d5db;
+    --radius: 8px;
+
+    --log-bg: #fafbfc;
+    --log-text: #24292f;
+    --log-text-dim: #b0b8c1;
+    --log-text-muted: #57606a;
+    --log-backend: #bf5a15;
+    --log-frontend: #0550ae;
+    --log-error: #cf222e;
+
+    --overlay-bg: rgba(0, 0, 0, 0.3);
+
+    color-scheme: light;
+  }
 }
 
 body {
@@ -50,4 +133,8 @@ button {
   outline: none;
   font-family: inherit;
   font-size: inherit;
+}
+
+@keyframes wt-spin {
+  to { transform: rotate(360deg); }
 }

@@ -1,37 +1,70 @@
-use git2::Repository;
+use std::collections::HashMap;
 use std::path::Path;
+use std::process::Command;
 
 use crate::state::{Branch, BranchEnvironment};
-use std::collections::HashMap;
 
 pub fn list_local_branches(
     repo_path: &Path,
     environments: &HashMap<String, BranchEnvironment>,
 ) -> Result<Vec<Branch>, String> {
-    let repo = Repository::open(repo_path).map_err(|e| format!("Failed to open repo: {}", e))?;
+    // Use `git worktree list --porcelain` to get only branches with worktrees
+    let output = Command::new("git")
+        .current_dir(repo_path)
+        .args(["worktree", "list", "--porcelain"])
+        .output()
+        .map_err(|e| format!("Failed to run git worktree list: {}", e))?;
 
-    let head = repo.head().ok();
-    let current_branch = head
-        .as_ref()
-        .and_then(|h| h.shorthand().map(|s| s.to_string()));
+    if !output.status.success() {
+        return Err("git worktree list failed".to_string());
+    }
 
-    let branches = repo
-        .branches(Some(git2::BranchType::Local))
-        .map_err(|e| format!("Failed to list branches: {}", e))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Get current branch of this worktree
+    let head_output = Command::new("git")
+        .current_dir(repo_path)
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .output()
+        .ok()
+        .and_then(|o| if o.status.success() {
+            Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
+        } else {
+            None
+        });
 
     let mut result = Vec::new();
-    for branch in branches {
-        let (branch, _) = branch.map_err(|e| format!("Failed to read branch: {}", e))?;
-        if let Some(name) = branch.name().ok().flatten() {
-            let name = name.to_string();
-            let is_current = current_branch.as_deref() == Some(&name);
-            let environment = environments.get(&name).cloned();
-            result.push(Branch {
-                name,
-                is_current,
-                environment,
-            });
+    let mut current_branch: Option<String> = None;
+
+    for line in stdout.lines() {
+        if let Some(branch_ref) = line.strip_prefix("branch ") {
+            let name = branch_ref
+                .strip_prefix("refs/heads/")
+                .unwrap_or(branch_ref)
+                .to_string();
+            current_branch = Some(name);
+        } else if line.is_empty() {
+            // End of a worktree entry
+            if let Some(name) = current_branch.take() {
+                let is_current = head_output.as_deref() == Some(&name);
+                let environment = environments.get(&name).cloned();
+                result.push(Branch {
+                    name,
+                    is_current,
+                    environment,
+                });
+            }
         }
+    }
+    // Handle last entry (if no trailing empty line)
+    if let Some(name) = current_branch.take() {
+        let is_current = head_output.as_deref() == Some(&name);
+        let environment = environments.get(&name).cloned();
+        result.push(Branch {
+            name,
+            is_current,
+            environment,
+        });
     }
 
     // Sort: current branch first, then alphabetically

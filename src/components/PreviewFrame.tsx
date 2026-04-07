@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { previewUrl } from "../lib/commands";
 
 interface PreviewFrameProps {
   branchName: string;
@@ -11,17 +12,19 @@ export function PreviewFrame({ branchName, port }: PreviewFrameProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
+  const url = previewUrl(branchName, port);
+
   // Auto-refresh on file change
   useEffect(() => {
     const unlisten = listen(`file-changed:${branchName}`, () => {
       if (iframeRef.current) {
-        iframeRef.current.src = `http://localhost:${port}`;
+        iframeRef.current.src = url;
       }
     });
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, [branchName, port]);
+  }, [branchName, url]);
 
   return (
     <div
@@ -55,7 +58,7 @@ export function PreviewFrame({ branchName, port }: PreviewFrameProps) {
           <button
             onClick={() => {
               if (iframeRef.current) {
-                iframeRef.current.src = `http://localhost:${port}`;
+                iframeRef.current.src = url;
               }
             }}
             style={{
@@ -69,7 +72,7 @@ export function PreviewFrame({ branchName, port }: PreviewFrameProps) {
             Reload
           </button>
           <button
-            onClick={() => window.open(`http://localhost:${port}`, "_blank")}
+            onClick={() => window.open(url, "_blank")}
             style={{
               padding: "2px 6px",
               background: "var(--accent-dim)",
@@ -119,7 +122,7 @@ export function PreviewFrame({ branchName, port }: PreviewFrameProps) {
         )}
         <iframe
           ref={iframeRef}
-          src={`http://localhost:${port}`}
+          src={url}
           onLoad={() => {
             setLoading(false);
             setError(false);

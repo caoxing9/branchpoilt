@@ -7,7 +7,7 @@ mod watcher;
 
 use tauri::Manager;
 
-use state::{AppState, SharedState};
+use state::{AppState, SettingsStore, SharedState};
 use std::sync::Mutex;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -18,11 +18,17 @@ pub fn run() {
         .manage(Mutex::new(AppState::new()) as SharedState)
         .setup(|app| {
             tray::setup_tray(app)?;
+            // Load persisted settings
+            let saved = SettingsStore::load(app.handle());
+            let state = app.state::<SharedState>();
+            let mut s = state.lock().unwrap();
+            s.settings = saved;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::git::list_branches,
             commands::git::remove_worktree,
+            commands::git::create_worktree,
             commands::service::start_branch,
             commands::service::stop_branch,
             commands::service::get_environments,
@@ -31,14 +37,7 @@ pub fn run() {
             commands::settings::get_settings,
             commands::settings::set_project_path,
         ])
-        .on_window_event(|window, event| {
-            // Hide window on focus lost (menubar app behavior)
-            if let tauri::WindowEvent::Focused(false) = event {
-                if window.label() == "main" {
-                    let _ = window.hide();
-                }
-            }
-        })
+        .on_window_event(|_window, _event| {})
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
