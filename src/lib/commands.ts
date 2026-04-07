@@ -57,6 +57,10 @@ export async function updateWorktreeEnv(branchName: string, overrides: WorktreeE
   return invoke("update_worktree_env", { branchName, overrides });
 }
 
+export async function killBranchPorts(branchName: string): Promise<string> {
+  return invoke("kill_branch_ports", { branchName });
+}
+
 export async function openInVscode(path: string): Promise<void> {
   return invoke("open_in_vscode", { path });
 }
