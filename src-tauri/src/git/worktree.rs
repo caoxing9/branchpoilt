@@ -4,6 +4,17 @@ use tauri::{AppHandle, Emitter};
 
 use crate::process::manager;
 
+/// Database configuration mode for worktree creation
+#[derive(Debug, Clone)]
+pub enum DbMode {
+    /// Create a new database from the base template, named after the branch
+    New,
+    /// Clone a new database from an existing worktree's database, named after the branch
+    Clone { source_branch: String },
+    /// Reuse an existing worktree's database and Redis directly
+    Reuse { source_branch: String },
+}
+
 /// Emit a progress event for worktree creation
 fn emit_progress(app: &AppHandle, branch: &str, step: &str, message: &str, done: bool) {
     let _ = app.emit(
@@ -60,16 +71,19 @@ fn assign_slot(repo_path: &Path) -> u32 {
 
 /// Read the base .env.development.local (or .env.development) from the main repo,
 /// then override port/DB/Redis keys for an isolated worktree.
+///
+/// `db_url_override` / `redis_uri_override`: if provided, use these directly instead of deriving.
 fn generate_env_file(
     repo_path: &Path,
     worktree_path: &Path,
     slot: u32,
     db_name: &str,
+    db_url_override: Option<&str>,
+    redis_uri_override: Option<&str>,
 ) -> Result<(), String> {
     let port = 3000 + slot * 100;
     let socket_port = port + 3;
     let server_port = port + 3;
-    let redis_db = slot;
 
     // Try to read existing env from main repo
     let env_local = repo_path.join("enterprise/app-ee/.env.development.local");
@@ -105,13 +119,24 @@ fn generate_env_file(
         }
     }
 
-    // Read base DB URL to derive the branch-specific one
-    let base_db_url = manager::read_base_database_url(repo_path)
-        .unwrap_or_else(|| format!(
-            "postgresql://teable:teable@127.0.0.1:5432/{}?schema=public&statement_cache_size=1",
-            db_name
-        ));
-    let branch_db_url = manager::replace_db_name(&base_db_url, db_name);
+    // Determine DB URL
+    let branch_db_url = if let Some(override_url) = db_url_override {
+        override_url.to_string()
+    } else {
+        let base_db_url = manager::read_base_database_url(repo_path)
+            .unwrap_or_else(|| format!(
+                "postgresql://teable:teable@127.0.0.1:5432/{}?schema=public&statement_cache_size=1",
+                db_name
+            ));
+        manager::replace_db_name(&base_db_url, db_name)
+    };
+
+    // Determine Redis URI
+    let redis_uri = if let Some(override_uri) = redis_uri_override {
+        override_uri.to_string()
+    } else {
+        format!("redis://:teable@127.0.0.1:6379/{}", slot)
+    };
 
     // Append overridden values
     lines.push(String::new());
@@ -123,7 +148,7 @@ fn generate_env_file(
     lines.push(format!("STORAGE_PREFIX=http://127.0.0.1:{}", port));
     lines.push(format!("PRISMA_DATABASE_URL={}", branch_db_url));
     lines.push("PUBLIC_DATABASE_PROXY=127.0.0.1:5432".to_string());
-    lines.push(format!("BACKEND_CACHE_REDIS_URI=redis://:teable@127.0.0.1:6379/{}", redis_db));
+    lines.push(format!("BACKEND_CACHE_REDIS_URI={}", redis_uri));
 
     let output_path = worktree_path.join("enterprise/app-ee/.env.development.local");
     if let Some(parent) = output_path.parent() {
@@ -136,12 +161,28 @@ fn generate_env_file(
     Ok(())
 }
 
+/// Resolve the source worktree's DB info for clone/reuse modes
+fn resolve_source_db_info(
+    repo_path: &Path,
+    source_branch: &str,
+) -> Result<(Option<String>, Option<String>, Option<String>), String> {
+    let infos = manager::list_worktree_db_info(repo_path);
+    let source = infos.iter().find(|i| i.branch_name == source_branch)
+        .ok_or_else(|| format!("Source branch '{}' not found or has no worktree", source_branch))?;
+    Ok((
+        source.database_name.clone(),
+        source.database_url.clone(),
+        source.redis_uri.clone(),
+    ))
+}
+
 /// Full worktree creation matching the `wt` shell workflow:
 /// fetch develop → create branch → sibling worktree → env → install deps → migrate DB
 pub fn create_worktree_full(
     app: &AppHandle,
     repo_path: &Path,
     branch_name: &str,
+    db_mode: DbMode,
 ) -> Result<PathBuf, String> {
     let repo_name = repo_path
         .file_name()
@@ -211,8 +252,46 @@ pub fn create_worktree_full(
     // Step 3: Generate .env.development.local
     emit_progress(app, branch_name, "env", "Setting up environment...", false);
     let slot = assign_slot(repo_path);
-    let db_name = format!("teable_wt{}", slot);
-    generate_env_file(repo_path, &worktree_path, slot, &db_name)?;
+
+    // Determine DB name and overrides based on mode
+    let new_db_name = manager::branch_to_db_name(branch_name);
+
+    let (db_url_override, redis_uri_override, skip_db_create, skip_migration) = match &db_mode {
+        DbMode::New => {
+            // New DB named after branch, no overrides
+            (None, None, false, false)
+        }
+        DbMode::Clone { .. } => {
+            // New DB named after branch, will be cloned from source in step 5
+            (None, None, false, true) // skip migration since we clone data
+        }
+        DbMode::Reuse { source_branch } => {
+            // Reuse source's DB URL and Redis URI directly
+            let (_src_db_name, src_db_url, src_redis_uri) =
+                resolve_source_db_info(repo_path, source_branch)?;
+            (src_db_url, src_redis_uri, true, true)
+        }
+    };
+
+    let env_db_name = match &db_mode {
+        DbMode::Reuse { .. } => {
+            // For reuse, the DB name comes from the override URL
+            db_url_override
+                .as_ref()
+                .and_then(|u| manager::extract_db_name(u))
+                .unwrap_or_else(|| new_db_name.clone())
+        }
+        _ => new_db_name.clone(),
+    };
+
+    generate_env_file(
+        repo_path,
+        &worktree_path,
+        slot,
+        &env_db_name,
+        db_url_override.as_deref(),
+        redis_uri_override.as_deref(),
+    )?;
 
     // Step 4: Install dependencies
     emit_progress(app, branch_name, "install", "Installing dependencies (pnpm install)...", false);
@@ -226,30 +305,49 @@ pub fn create_worktree_full(
         return Err(format!("pnpm install failed: {}", stderr));
     }
 
-    // Step 5: Database setup - ensure docker services and create DB
+    // Step 5: Database setup
     emit_progress(app, branch_name, "database", "Setting up database...", false);
-    if let Some(base_url) = manager::read_base_database_url(&worktree_path) {
-        match manager::ensure_branch_database(&base_url, &format!("wt{}", slot)) {
-            Ok(url) => {
-                eprintln!("[BranchPilot] Created database with URL: {}", url);
-            }
-            Err(e) => {
-                eprintln!("[BranchPilot] Warning: database creation failed: {}. Will try migration anyway.", e);
+    if !skip_db_create {
+        if let Some(base_url) = manager::read_base_database_url(repo_path) {
+            let template_db = match &db_mode {
+                DbMode::Clone { source_branch } => {
+                    // Use source branch's DB as template
+                    let (src_db_name, _, _) = resolve_source_db_info(repo_path, source_branch)?;
+                    src_db_name.unwrap_or_else(|| "teable".to_string())
+                }
+                _ => {
+                    // Use base DB (from main repo's URL) as template
+                    manager::extract_db_name(&base_url).unwrap_or_else(|| "teable".to_string())
+                }
+            };
+
+            match manager::create_database_with_template(&base_url, &new_db_name, &template_db) {
+                Ok(url) => {
+                    eprintln!("[BranchPilot] Created database '{}' from template '{}': {}", new_db_name, template_db, url);
+                }
+                Err(e) => {
+                    eprintln!("[BranchPilot] Warning: database creation failed: {}. Will try migration anyway.", e);
+                }
             }
         }
+    } else {
+        eprintln!("[BranchPilot] Skipping database creation (reuse mode)");
     }
 
-    // Step 6: Run migration
+    // Step 6: Run migration (skip for clone/reuse since data already exists)
     emit_progress(app, branch_name, "migrate", "Running database migration (make postgres.mode)...", false);
-    let output = Command::new("make")
-        .args(["postgres.mode"])
-        .current_dir(&worktree_path)
-        .output()
-        .map_err(|e| format!("Failed to run make postgres.mode: {}", e))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        eprintln!("[BranchPilot] Warning: migration may have failed: {}", stderr);
-        // Don't fail the whole flow - migration might work later
+    if !skip_migration {
+        let output = Command::new("make")
+            .args(["postgres.mode"])
+            .current_dir(&worktree_path)
+            .output()
+            .map_err(|e| format!("Failed to run make postgres.mode: {}", e))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            eprintln!("[BranchPilot] Warning: migration may have failed: {}", stderr);
+        }
+    } else {
+        eprintln!("[BranchPilot] Skipping migration (data from source)");
     }
 
     emit_progress(app, branch_name, "done", "Worktree ready!", true);

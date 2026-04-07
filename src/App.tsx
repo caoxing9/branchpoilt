@@ -35,7 +35,6 @@ function App() {
       }
     } catch (e) {
       setError(String(e));
-      console.error("Failed to select project:", e);
     }
   }
 
@@ -45,23 +44,12 @@ function App() {
       await openPreviewWindow([]);
     } catch (e) {
       setError(String(e));
-      console.error("Failed to open preview:", e);
     }
   }
 
   if (view === "loading") {
     return (
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          height: "100vh",
-          background: "var(--bg-primary)",
-          color: "var(--text-secondary)",
-          fontSize: 13,
-        }}
-      />
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "var(--bg-primary)" }} />
     );
   }
 
@@ -76,96 +64,54 @@ function App() {
     );
   }
 
+  const themeIcon = theme === "dark" ? "\u263D" : theme === "light" ? "\u2600" : "\u25D0";
+
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100vh",
-        background: "var(--bg-primary)",
-      }}
-    >
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "var(--bg-primary)" }}>
       {/* Title bar */}
       <div
+        data-tauri-drag-region
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          padding: "10px 12px 6px",
+          padding: "8px 10px 6px 78px",
+          background: "var(--toolbar-bg)",
           borderBottom: "1px solid var(--border)",
         }}
       >
         <span
+          data-tauri-drag-region
           style={{ fontWeight: 700, fontSize: 14, letterSpacing: -0.3, flex: 1 }}
         >
           BranchPilot
         </span>
-        <div style={{ display: "flex", gap: 4 }}>
-          <button
-            onClick={() => setShowCreateDialog(true)}
-            style={{
-              padding: "3px 8px",
-              background: "var(--accent)",
-              color: "var(--accent-on)",
-              borderRadius: 4,
-              fontSize: 11,
-              fontWeight: 600,
-            }}
-          >
-            + Worktree
-          </button>
-          <button
-            onClick={handleCompare}
-            style={{
-              padding: "3px 8px",
-              background: "var(--accent-dim)",
-              color: "var(--accent)",
-              borderRadius: 4,
-              fontSize: 11,
-            }}
-          >
-            Compare
-          </button>
-          <button
-            onClick={handleSelectProject}
-            style={{
-              padding: "3px 8px",
-              background: "var(--bg-card)",
-              color: "var(--text-secondary)",
-              borderRadius: 4,
-              fontSize: 11,
-            }}
-          >
-            Open Project
-          </button>
-          <button
-            onClick={cycleTheme}
-            title={`Theme: ${theme}`}
-            style={{
-              padding: "3px 8px",
-              background: "var(--bg-card)",
-              color: "var(--text-secondary)",
-              borderRadius: 4,
-              fontSize: 11,
-              minWidth: 24,
-            }}
-          >
-            {theme === "dark" ? "\u263D" : theme === "light" ? "\u2600" : "\u25D0"}
-          </button>
+        <div style={{ display: "flex", gap: 3, alignItems: "center", flexShrink: 0 }}>
+          <TitleBtn accent onClick={() => setShowCreateDialog(true)}>+New</TitleBtn>
+          <TitleBtn dim onClick={handleCompare}>Compare</TitleBtn>
+          <TitleBtn onClick={handleSelectProject}>Open</TitleBtn>
+          <div style={{ width: 1, height: 14, background: "var(--border-strong)", margin: "0 2px" }} />
+          <TitleBtn onClick={cycleTheme} title={`Theme: ${theme}`}>
+            {themeIcon}
+          </TitleBtn>
         </div>
       </div>
 
-      {/* Error display */}
+      {/* Error */}
       {error && (
-        <div style={{ padding: "6px 12px", background: "var(--status-error)22", color: "var(--status-error)", fontSize: 11 }}>
+        <div style={{
+          padding: "6px 12px",
+          background: "rgba(248,113,113,0.12)",
+          color: "var(--status-error)",
+          fontSize: 11,
+          borderBottom: "1px solid rgba(248,113,113,0.15)",
+        }}>
           {error}
         </div>
       )}
 
-      {/* Branch list */}
       <BranchList />
 
-      {/* Create worktree dialog */}
       {showCreateDialog && (
         <CreateWorktreeDialog
           onClose={() => setShowCreateDialog(false)}
@@ -173,6 +119,39 @@ function App() {
         />
       )}
     </div>
+  );
+}
+
+function TitleBtn({
+  children, onClick, accent, dim, title,
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  accent?: boolean;
+  dim?: boolean;
+  title?: string;
+}) {
+  let bg = "var(--bg-card)";
+  let color = "var(--text-secondary)";
+  if (accent) { bg = "var(--accent)"; color = "var(--accent-on)"; }
+  else if (dim) { bg = "var(--accent-dim)"; color = "var(--accent)"; }
+
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      style={{
+        padding: "3px 8px",
+        background: bg,
+        color,
+        borderRadius: 5,
+        fontSize: 11,
+        fontWeight: accent ? 600 : 400,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {children}
+    </button>
   );
 }
 

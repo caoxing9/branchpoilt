@@ -24,7 +24,9 @@
         "visible": true,
         "skipTaskbar": false,
         "alwaysOnTop": false,
-        "transparent": false
+        "transparent": false,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       }
     ],
     "security": {

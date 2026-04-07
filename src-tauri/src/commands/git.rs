@@ -1,8 +1,8 @@
 use tauri::{AppHandle, Emitter, State};
 
 use crate::git::branches::list_local_branches;
-use crate::git::worktree;
-use crate::process::manager::stop_service;
+use crate::git::worktree::{self, DbMode};
+use crate::process::manager::{self, stop_service, WorktreeDbInfo};
 use crate::state::{Branch, SharedState};
 
 #[tauri::command]
@@ -13,7 +13,7 @@ pub fn list_branches(state: State<'_, SharedState>) -> Result<Vec<Branch>, Strin
     list_local_branches(&path, envs)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn remove_worktree(branch_name: String, state: State<'_, SharedState>) -> Result<(), String> {
     // Stop service first
     let _ = stop_service(&state, &branch_name);
@@ -32,6 +32,8 @@ pub fn remove_worktree(branch_name: String, state: State<'_, SharedState>) -> Re
 #[tauri::command(async)]
 pub fn create_worktree(
     branch_name: String,
+    db_mode: Option<String>,
+    source_branch: Option<String>,
     app: AppHandle,
     state: State<'_, SharedState>,
 ) -> Result<(), String> {
@@ -40,10 +42,30 @@ pub fn create_worktree(
         s.project_path().ok_or("No project path set")?
     };
 
-    worktree::create_worktree_full(&app, &repo_path, &branch_name)?;
+    let mode = match db_mode.as_deref() {
+        Some("clone") => {
+            let src = source_branch.ok_or("source_branch is required for clone mode")?;
+            DbMode::Clone { source_branch: src }
+        }
+        Some("reuse") => {
+            let src = source_branch.ok_or("source_branch is required for reuse mode")?;
+            DbMode::Reuse { source_branch: src }
+        }
+        _ => DbMode::New,
+    };
+
+    worktree::create_worktree_full(&app, &repo_path, &branch_name, mode)?;
 
     let _ = app.emit("environment-updated", ());
     Ok(())
+}
+
+#[tauri::command]
+pub fn list_worktree_db_info(state: State<'_, SharedState>) -> Result<Vec<WorktreeDbInfo>, String> {
+    let s = state.lock().unwrap();
+    let path = s.project_path().ok_or("No project path set")?;
+    drop(s);
+    Ok(manager::list_worktree_db_info(&path))
 }
 
 #[tauri::command]

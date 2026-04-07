@@ -52,12 +52,10 @@ export function SwimLaneBoard({
         if (!prev) return null;
         const dx = Math.abs(e.clientX - prev.startX);
         const dy = Math.abs(e.clientY - prev.startY);
-        // Activate drag after 5px movement
         const active = prev.active || dx > 5 || dy > 5;
         return { ...prev, currentX: e.clientX, currentY: e.clientY, active };
       });
 
-      // Hit-test lanes
       let found: DevCategory | null = null;
       laneRefs.current.forEach((el, cat) => {
         const rect = el.getBoundingClientRect();
@@ -77,7 +75,6 @@ export function SwimLaneBoard({
       if (dragging.active && dropTarget && dragging.branchName) {
         setCategory(dragging.branchName, dropTarget);
       } else if (!dragging.active && onSelect) {
-        // No drag happened — treat as a click
         onSelect(dragging.branchName);
       }
       setDragging(null);
@@ -94,7 +91,6 @@ export function SwimLaneBoard({
 
   const handleCardMouseDown = useCallback(
     (e: React.MouseEvent, branchName: string) => {
-      // Ignore if clicking buttons
       if ((e.target as HTMLElement).closest("button")) return;
       e.preventDefault();
       setDragging({
@@ -199,10 +195,10 @@ export function SwimLaneBoard({
                   minWidth: 160,
                   display: "flex",
                   flexDirection: "column",
-                  background: isOver ? "var(--bg-card)" : "var(--bg-secondary)",
+                  background: isOver ? "var(--bg-card-hover)" : "var(--bg-secondary)",
                   borderRadius: "var(--radius)",
                   overflow: "hidden",
-                  border: isOver ? `2px dashed ${color}` : "2px solid transparent",
+                  border: isOver ? `2px dashed ${color}` : "1px solid var(--border)",
                   transition: "background 0.15s, border-color 0.15s",
                 }}
               >
@@ -210,7 +206,7 @@ export function SwimLaneBoard({
                 <div
                   style={{
                     padding: "8px 10px",
-                    borderBottom: `2px solid ${color}44`,
+                    borderBottom: `2px solid ${color}33`,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "space-between",
@@ -235,6 +231,7 @@ export function SwimLaneBoard({
                       background: "var(--bg-card)",
                       padding: "1px 6px",
                       borderRadius: 8,
+                      border: "1px solid var(--border)",
                     }}
                   >
                     {laneBranches.length}
@@ -303,7 +300,7 @@ export function SwimLaneBoard({
                       width: 2,
                       height: 32,
                       borderRadius: 1,
-                      background: "var(--border)",
+                      background: "var(--border-strong)",
                       transition: "background 0.15s",
                     }}
                   />
@@ -324,12 +321,12 @@ export function SwimLaneBoard({
             padding: "4px 10px",
             background: "var(--accent)",
             color: "var(--bg-primary)",
-            borderRadius: 6,
+            borderRadius: 8,
             fontSize: 11,
             fontWeight: 600,
             pointerEvents: "none",
             zIndex: 9999,
-            boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
             whiteSpace: "nowrap",
             maxWidth: 200,
             overflow: "hidden",

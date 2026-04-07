@@ -145,7 +145,7 @@ export function BranchList() {
   }
 
   const sortLabel = (key: SortKey) => {
-    const arrow = sortKey === key ? (sortDir === "asc" ? " ↑" : " ↓") : "";
+    const arrow = sortKey === key ? (sortDir === "asc" ? " \u2191" : " \u2193") : "";
     return arrow;
   };
 
@@ -159,6 +159,7 @@ export function BranchList() {
           gap: 8,
           padding: "6px 10px",
           borderBottom: "1px solid var(--border)",
+          background: "var(--toolbar-bg)",
         }}
       >
         {/* Search */}
@@ -170,20 +171,21 @@ export function BranchList() {
             placeholder="Search branches..."
             style={{
               width: "100%",
-              padding: "4px 8px 4px 24px",
+              padding: "5px 8px 5px 26px",
               fontSize: 11,
               background: "var(--bg-card)",
               color: "var(--text-primary)",
               border: "1px solid var(--border)",
-              borderRadius: 4,
+              borderRadius: 6,
               outline: "none",
               fontFamily: "inherit",
+              transition: "border-color 0.15s, box-shadow 0.15s",
             }}
           />
           <span
             style={{
               position: "absolute",
-              left: 7,
+              left: 8,
               top: "50%",
               transform: "translateY(-50%)",
               fontSize: 11,
@@ -191,20 +193,29 @@ export function BranchList() {
               pointerEvents: "none",
             }}
           >
-            ⌕
+            {"\u2315"}
           </span>
         </div>
 
         {/* View toggle */}
-        <div style={{ display: "flex", gap: 2, background: "var(--bg-card)", borderRadius: 4, padding: 2, flexShrink: 0 }}>
+        <div style={{
+          display: "flex",
+          gap: 2,
+          background: "var(--bg-card)",
+          borderRadius: 6,
+          padding: 2,
+          flexShrink: 0,
+          border: "1px solid var(--border)",
+        }}>
           <button
             onClick={() => setViewMode("list")}
             style={{
-              padding: "2px 8px",
+              padding: "3px 10px",
               fontSize: 11,
-              borderRadius: 3,
-              background: viewMode === "list" ? "var(--border)" : "transparent",
-              color: viewMode === "list" ? "var(--text-primary)" : "var(--text-secondary)",
+              borderRadius: 4,
+              background: viewMode === "list" ? "var(--accent-dim)" : "transparent",
+              color: viewMode === "list" ? "var(--accent)" : "var(--text-secondary)",
+              transition: "all 0.15s",
             }}
           >
             List
@@ -212,11 +223,12 @@ export function BranchList() {
           <button
             onClick={() => setViewMode("board")}
             style={{
-              padding: "2px 8px",
+              padding: "3px 10px",
               fontSize: 11,
-              borderRadius: 3,
-              background: viewMode === "board" ? "var(--border)" : "transparent",
-              color: viewMode === "board" ? "var(--text-primary)" : "var(--text-secondary)",
+              borderRadius: 4,
+              background: viewMode === "board" ? "var(--accent-dim)" : "transparent",
+              color: viewMode === "board" ? "var(--accent)" : "var(--text-secondary)",
+              transition: "all 0.15s",
             }}
           >
             Board
@@ -232,6 +244,7 @@ export function BranchList() {
           justifyContent: "space-between",
           padding: "4px 10px",
           borderBottom: "1px solid var(--border)",
+          background: "var(--toolbar-bg)",
         }}
       >
         {/* Category filter */}
@@ -241,9 +254,10 @@ export function BranchList() {
             style={{
               padding: "2px 8px",
               fontSize: 11,
-              borderRadius: 4,
+              borderRadius: 5,
               background: filter === "all" ? "var(--accent-dim)" : "transparent",
               color: filter === "all" ? "var(--accent)" : "var(--text-secondary)",
+              transition: "all 0.15s",
             }}
           >
             All
@@ -256,9 +270,10 @@ export function BranchList() {
                 style={{
                   padding: "2px 8px",
                   fontSize: 11,
-                  borderRadius: 4,
-                  background: filter === key ? color + "33" : "transparent",
+                  borderRadius: 5,
+                  background: filter === key ? color + "22" : "transparent",
                   color: filter === key ? color : "var(--text-secondary)",
+                  transition: "all 0.15s",
                 }}
               >
                 {label}
@@ -269,7 +284,7 @@ export function BranchList() {
 
         {/* Sort buttons */}
         <div style={{ display: "flex", gap: 2, alignItems: "center" }}>
-          <span style={{ fontSize: 10, color: "var(--text-secondary)", marginRight: 4 }}>Sort:</span>
+          <span style={{ fontSize: 10, color: "var(--text-secondary)", marginRight: 4, opacity: 0.7 }}>Sort:</span>
           {([
             ["name", "Name"],
             ["status", "Status"],
@@ -281,9 +296,10 @@ export function BranchList() {
               style={{
                 padding: "2px 6px",
                 fontSize: 10,
-                borderRadius: 3,
-                background: sortKey === key ? "var(--border)" : "transparent",
-                color: sortKey === key ? "var(--text-primary)" : "var(--text-secondary)",
+                borderRadius: 4,
+                background: sortKey === key ? "var(--accent-dim)" : "transparent",
+                color: sortKey === key ? "var(--accent)" : "var(--text-secondary)",
+                transition: "all 0.15s",
               }}
             >
               {label}{sortLabel(key)}

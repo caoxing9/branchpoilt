@@ -189,9 +189,19 @@ fn spawn_process(
             let reader = BufReader::new(stdout);
             for line in reader.lines() {
                 if let Ok(line) = line {
+                    let formatted = format!("{}{}", prefix, line);
+                    // Store in state for persistence
+                    if let Some(state) = app_clone.try_state::<SharedState>() {
+                        let mut s = state.lock().unwrap();
+                        let buf = s.logs.entry(branch_name_s.clone()).or_insert_with(|| std::collections::VecDeque::with_capacity(2000));
+                        if buf.len() >= 2000 {
+                            buf.pop_front();
+                        }
+                        buf.push_back(formatted.clone());
+                    }
                     let _ = app_clone.emit(
                         &format!("branch-log:{}", branch_name_s),
-                        format!("{}{}", prefix, line),
+                        formatted,
                     );
                 }
             }
@@ -207,9 +217,19 @@ fn spawn_process(
             let reader = BufReader::new(stderr);
             for line in reader.lines() {
                 if let Ok(line) = line {
+                    let formatted = format!("{}{}", prefix, line);
+                    // Store in state for persistence
+                    if let Some(state) = app_clone.try_state::<SharedState>() {
+                        let mut s = state.lock().unwrap();
+                        let buf = s.logs.entry(branch_name_s.clone()).or_insert_with(|| std::collections::VecDeque::with_capacity(2000));
+                        if buf.len() >= 2000 {
+                            buf.pop_front();
+                        }
+                        buf.push_back(formatted.clone());
+                    }
                     let _ = app_clone.emit(
                         &format!("branch-log:{}", branch_name_s),
-                        format!("{}{}", prefix, line),
+                        formatted,
                     );
                 }
             }
@@ -305,92 +325,8 @@ pub fn replace_db_name(url: &str, new_db_name: &str) -> String {
     url.to_string()
 }
 
-/// Create an isolated database for a branch if it doesn't exist
-pub fn ensure_branch_database(base_url: &str, branch_name: &str) -> Result<String, String> {
-    let safe_name = branch_name
-        .replace('/', "_")
-        .replace('-', "_")
-        .to_lowercase();
-    let branch_db_name = format!("teable_{}", safe_name);
-
-    // Extract connection info without db name for admin connection
-    // Connect to 'postgres' db to create the new one
-    let admin_url = replace_db_name(base_url, "postgres");
-    // Strip query params for psql
-    let admin_url_clean = admin_url.split('?').next().unwrap_or(&admin_url);
-
-    // Check if database already exists
-    let check = Command::new("psql")
-        .args([admin_url_clean, "-tAc",
-            &format!("SELECT 1 FROM pg_database WHERE datname = '{}'", branch_db_name)])
-        .output()
-        .map_err(|e| format!("Failed to run psql: {}", e))?;
-
-    let exists = String::from_utf8_lossy(&check.stdout).trim() == "1";
-
-    if !exists {
-        // Extract the base db name from the original URL
-        let base_db = extract_db_name(base_url).unwrap_or("teable".to_string());
-
-        eprintln!("[BranchPilot] Creating database '{}' from template '{}'", branch_db_name, base_db);
-
-        // Create database from template (clones all data)
-        let create = Command::new("psql")
-            .args([admin_url_clean, "-c",
-                &format!("CREATE DATABASE \"{}\" TEMPLATE \"{}\"", branch_db_name, base_db)])
-            .output()
-            .map_err(|e| format!("Failed to create database: {}", e))?;
-
-        if !create.status.success() {
-            let stderr = String::from_utf8_lossy(&create.stderr);
-            // If template is being accessed, fall back to empty db + migration
-            if stderr.contains("being accessed by other users") {
-                eprintln!("[BranchPilot] Template db in use, creating empty database '{}'", branch_db_name);
-                let create_empty = Command::new("psql")
-                    .args([admin_url_clean, "-c",
-                        &format!("CREATE DATABASE \"{}\"", branch_db_name)])
-                    .output()
-                    .map_err(|e| format!("Failed to create empty database: {}", e))?;
-
-                if !create_empty.status.success() {
-                    let stderr = String::from_utf8_lossy(&create_empty.stderr);
-                    return Err(format!("Failed to create database: {}", stderr));
-                }
-            } else {
-                return Err(format!("Failed to create database: {}", stderr));
-            }
-        }
-    } else {
-        eprintln!("[BranchPilot] Database '{}' already exists", branch_db_name);
-    }
-
-    // Return the new database URL
-    let new_url = replace_db_name(base_url, &branch_db_name);
-    Ok(new_url)
-}
-
-/// Assign a unique Redis db number for a branch.
-/// Redis URLs look like: redis://:password@host:port/db_number
-/// We hash the branch name to pick a db in range 2..15 (reserving 0-1).
-fn assign_redis_db(base_uri: &str, branch_name: &str) -> String {
-    // Simple hash: sum of bytes mod 14, offset by 2 → range [2, 15]
-    let hash: u32 = branch_name.bytes().map(|b| b as u32).sum();
-    let db_num = (hash % 14) + 2;
-
-    // Replace the db number at the end of the URI: redis://:pass@host:port/OLD -> redis://:pass@host:port/NEW
-    if let Some(last_slash) = base_uri.rfind('/') {
-        // Check that what's after the last slash looks like a db number
-        let after_slash = &base_uri[last_slash + 1..];
-        if after_slash.chars().all(|c| c.is_ascii_digit()) {
-            return format!("{}/{}", &base_uri[..last_slash], db_num);
-        }
-    }
-    // Fallback: append /db_num
-    format!("{}/{}", base_uri.trim_end_matches('/'), db_num)
-}
-
 /// Extract database name from a PostgreSQL URL
-fn extract_db_name(url: &str) -> Option<String> {
+pub fn extract_db_name(url: &str) -> Option<String> {
     if let Some(slash_pos) = url.rfind("://") {
         let after_proto = &url[slash_pos + 3..];
         if let Some(db_start) = after_proto.find('/') {
@@ -427,20 +363,20 @@ pub fn start_service(
     // Install deps if needed
     ensure_dependencies(worktree_path)?;
 
-    // Database isolation: create branch-specific database
-    let db_url = if let Some(base_url) = read_base_database_url(worktree_path) {
-        match ensure_branch_database(&base_url, branch_name) {
+    // Database: ensure the database referenced in the env file exists
+    let db_url = if let Some(env_url) = read_base_database_url(worktree_path) {
+        match ensure_database_exists(&env_url) {
             Ok(url) => {
                 eprintln!("[BranchPilot] Using database URL: {}", url);
                 Some(url)
             }
             Err(e) => {
-                eprintln!("[BranchPilot] Warning: database isolation failed: {}. Using default.", e);
-                None
+                eprintln!("[BranchPilot] Warning: database check failed: {}. Using env URL.", e);
+                Some(env_url)
             }
         }
     } else {
-        eprintln!("[BranchPilot] No PRISMA_DATABASE_URL found, skipping database isolation");
+        eprintln!("[BranchPilot] No PRISMA_DATABASE_URL found, skipping database setup");
         None
     };
 
@@ -453,13 +389,11 @@ pub fn start_service(
         }
     }
 
-    // Redis isolation: assign a unique Redis db number per branch to prevent session conflicts.
-    // Redis supports db 0-15 by default; we use db 2+ (reserving 0-1 for default/test).
+    // Redis: use the URI from the env file as-is (already configured during worktree creation)
     if let Some(redis_uri) = read_env_var(worktree_path, "BACKEND_CACHE_REDIS_URI") {
-        let isolated_uri = assign_redis_db(&redis_uri, branch_name);
-        eprintln!("[BranchPilot] Using Redis URI: {}", isolated_uri);
+        eprintln!("[BranchPilot] Using Redis URI: {}", redis_uri);
         for cmd in &mut commands {
-            cmd.env_vars.push(("BACKEND_CACHE_REDIS_URI".to_string(), isolated_uri.clone()));
+            cmd.env_vars.push(("BACKEND_CACHE_REDIS_URI".to_string(), redis_uri.clone()));
         }
     }
 
@@ -476,6 +410,268 @@ pub fn start_service(
     }
 
     let _ = app.emit("environment-updated", ());
+    Ok(())
+}
+
+/// Create a database with a specific name from a specific template.
+/// If the database already exists, do nothing.
+pub fn create_database_with_template(
+    base_url: &str,
+    new_db_name: &str,
+    template_db_name: &str,
+) -> Result<String, String> {
+    let admin_url = replace_db_name(base_url, "postgres");
+    let admin_url_clean = admin_url.split('?').next().unwrap_or(&admin_url);
+
+    // Check if database already exists
+    let check = Command::new("psql")
+        .args([admin_url_clean, "-tAc",
+            &format!("SELECT 1 FROM pg_database WHERE datname = '{}'", new_db_name)])
+        .output()
+        .map_err(|e| format!("Failed to run psql: {}", e))?;
+
+    let exists = String::from_utf8_lossy(&check.stdout).trim() == "1";
+
+    if !exists {
+        eprintln!("[BranchPilot] Creating database '{}' from template '{}'", new_db_name, template_db_name);
+
+        let create = Command::new("psql")
+            .args([admin_url_clean, "-c",
+                &format!("CREATE DATABASE \"{}\" TEMPLATE \"{}\"", new_db_name, template_db_name)])
+            .output()
+            .map_err(|e| format!("Failed to create database: {}", e))?;
+
+        if !create.status.success() {
+            let stderr = String::from_utf8_lossy(&create.stderr);
+            if stderr.contains("being accessed by other users") {
+                eprintln!("[BranchPilot] Template db '{}' in use, creating empty database '{}'", template_db_name, new_db_name);
+                let create_empty = Command::new("psql")
+                    .args([admin_url_clean, "-c",
+                        &format!("CREATE DATABASE \"{}\"", new_db_name)])
+                    .output()
+                    .map_err(|e| format!("Failed to create empty database: {}", e))?;
+
+                if !create_empty.status.success() {
+                    let stderr = String::from_utf8_lossy(&create_empty.stderr);
+                    return Err(format!("Failed to create database: {}", stderr));
+                }
+            } else {
+                return Err(format!("Failed to create database: {}", stderr));
+            }
+        }
+    } else {
+        eprintln!("[BranchPilot] Database '{}' already exists", new_db_name);
+    }
+
+    let new_url = replace_db_name(base_url, new_db_name);
+    Ok(new_url)
+}
+
+/// Ensure the database referenced in a URL exists. If not, create it empty.
+/// Returns the URL unchanged.
+pub fn ensure_database_exists(db_url: &str) -> Result<String, String> {
+    let db_name = extract_db_name(db_url).ok_or("Cannot extract database name from URL")?;
+    let admin_url = replace_db_name(db_url, "postgres");
+    let admin_url_clean = admin_url.split('?').next().unwrap_or(&admin_url);
+
+    let check = Command::new("psql")
+        .args([admin_url_clean, "-tAc",
+            &format!("SELECT 1 FROM pg_database WHERE datname = '{}'", db_name)])
+        .output()
+        .map_err(|e| format!("Failed to run psql: {}", e))?;
+
+    let exists = String::from_utf8_lossy(&check.stdout).trim() == "1";
+
+    if !exists {
+        eprintln!("[BranchPilot] Database '{}' does not exist, creating empty", db_name);
+        let create = Command::new("psql")
+            .args([admin_url_clean, "-c",
+                &format!("CREATE DATABASE \"{}\"", db_name)])
+            .output()
+            .map_err(|e| format!("Failed to create database: {}", e))?;
+
+        if !create.status.success() {
+            let stderr = String::from_utf8_lossy(&create.stderr);
+            return Err(format!("Failed to create database '{}': {}", db_name, stderr));
+        }
+    }
+
+    Ok(db_url.to_string())
+}
+
+/// Derive a safe database name from a branch name: teable_{sanitized}
+pub fn branch_to_db_name(branch_name: &str) -> String {
+    let safe_name = branch_name
+        .replace('/', "_")
+        .replace('-', "_")
+        .to_lowercase();
+    format!("teable_{}", safe_name)
+}
+
+/// Info about a worktree's database and Redis configuration
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorktreeDbInfo {
+    pub branch_name: String,
+    pub database_name: Option<String>,
+    pub database_url: Option<String>,
+    pub redis_uri: Option<String>,
+}
+
+/// Scan all worktrees and read their DB/Redis configuration from env files
+pub fn list_worktree_db_info(repo_path: &std::path::Path) -> Vec<WorktreeDbInfo> {
+    let mut result = Vec::new();
+
+    let output = Command::new("git")
+        .current_dir(repo_path)
+        .args(["worktree", "list", "--porcelain"])
+        .output();
+
+    let output = match output {
+        Ok(o) if o.status.success() => o,
+        _ => return result,
+    };
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut current_path: Option<String> = None;
+
+    for line in stdout.lines() {
+        if let Some(path) = line.strip_prefix("worktree ") {
+            current_path = Some(path.to_string());
+        } else if let Some(branch_ref) = line.strip_prefix("branch ") {
+            let short_name = branch_ref.strip_prefix("refs/heads/").unwrap_or(branch_ref);
+            if let Some(ref path) = current_path {
+                let wt_path = std::path::Path::new(path);
+                let db_url = read_base_database_url(wt_path);
+                let db_name = db_url.as_ref().and_then(|u| extract_db_name(u));
+                let redis_uri = read_env_var(wt_path, "BACKEND_CACHE_REDIS_URI");
+
+                result.push(WorktreeDbInfo {
+                    branch_name: short_name.to_string(),
+                    database_name: db_name,
+                    database_url: db_url,
+                    redis_uri,
+                });
+            }
+        }
+        if line.is_empty() {
+            current_path = None;
+        }
+    }
+
+    result
+}
+
+/// The keys that BranchPilot overrides in the env file
+pub const OVERRIDE_KEYS: &[&str] = &[
+    "PORT",
+    "SOCKET_PORT",
+    "SERVER_PORT",
+    "PUBLIC_ORIGIN",
+    "STORAGE_PREFIX",
+    "PRISMA_DATABASE_URL",
+    "PUBLIC_DATABASE_PROXY",
+    "BACKEND_CACHE_REDIS_URI",
+];
+
+/// The BranchPilot override env vars for a worktree
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorktreeEnvOverrides {
+    pub port: Option<String>,
+    pub socket_port: Option<String>,
+    pub server_port: Option<String>,
+    pub public_origin: Option<String>,
+    pub storage_prefix: Option<String>,
+    pub prisma_database_url: Option<String>,
+    pub public_database_proxy: Option<String>,
+    pub backend_cache_redis_uri: Option<String>,
+}
+
+/// Read the BranchPilot override env vars from a worktree's env file
+pub fn read_worktree_env_overrides(worktree_path: &Path) -> WorktreeEnvOverrides {
+    WorktreeEnvOverrides {
+        port: read_env_var(worktree_path, "PORT"),
+        socket_port: read_env_var(worktree_path, "SOCKET_PORT"),
+        server_port: read_env_var(worktree_path, "SERVER_PORT"),
+        public_origin: read_env_var(worktree_path, "PUBLIC_ORIGIN"),
+        storage_prefix: read_env_var(worktree_path, "STORAGE_PREFIX"),
+        prisma_database_url: read_env_var(worktree_path, "PRISMA_DATABASE_URL"),
+        public_database_proxy: read_env_var(worktree_path, "PUBLIC_DATABASE_PROXY"),
+        backend_cache_redis_uri: read_env_var(worktree_path, "BACKEND_CACHE_REDIS_URI"),
+    }
+}
+
+/// Update BranchPilot override env vars in a worktree's env file.
+/// Only updates the values in the "BranchPilot overrides" section.
+pub fn update_worktree_env_overrides(
+    worktree_path: &Path,
+    overrides: &WorktreeEnvOverrides,
+) -> Result<(), String> {
+    // Find the env file
+    let env_paths = [
+        worktree_path.join("enterprise/app-ee/.env.development.local"),
+        worktree_path.join(".env.development.local"),
+    ];
+
+    let env_path = env_paths.iter().find(|p| p.exists())
+        .ok_or("No .env.development.local found in worktree")?;
+
+    let content = std::fs::read_to_string(env_path)
+        .map_err(|e| format!("Failed to read env file: {}", e))?;
+
+    // Build a map of new override values
+    let new_values: std::collections::HashMap<&str, &str> = [
+        ("PORT", overrides.port.as_deref()),
+        ("SOCKET_PORT", overrides.socket_port.as_deref()),
+        ("SERVER_PORT", overrides.server_port.as_deref()),
+        ("PUBLIC_ORIGIN", overrides.public_origin.as_deref()),
+        ("STORAGE_PREFIX", overrides.storage_prefix.as_deref()),
+        ("PRISMA_DATABASE_URL", overrides.prisma_database_url.as_deref()),
+        ("PUBLIC_DATABASE_PROXY", overrides.public_database_proxy.as_deref()),
+        ("BACKEND_CACHE_REDIS_URI", overrides.backend_cache_redis_uri.as_deref()),
+    ]
+    .into_iter()
+    .filter_map(|(k, v)| v.map(|val| (k, val)))
+    .collect();
+
+    // Rewrite the file, replacing override lines with new values
+    let mut output_lines: Vec<String> = Vec::new();
+    let mut replaced_keys: std::collections::HashSet<&str> = std::collections::HashSet::new();
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        // Check if this line is one of our override keys
+        let mut matched_key: Option<&str> = None;
+        for key in OVERRIDE_KEYS {
+            if trimmed.starts_with(&format!("{}=", key)) {
+                matched_key = Some(key);
+                break;
+            }
+        }
+
+        if let Some(key) = matched_key {
+            if let Some(new_val) = new_values.get(key) {
+                output_lines.push(format!("{}={}", key, new_val));
+                replaced_keys.insert(key);
+            } else {
+                output_lines.push(line.to_string());
+            }
+        } else {
+            output_lines.push(line.to_string());
+        }
+    }
+
+    // Append any new override keys that weren't in the file
+    for (key, val) in &new_values {
+        if !replaced_keys.contains(key) {
+            output_lines.push(format!("{}={}", key, val));
+        }
+    }
+
+    std::fs::write(env_path, output_lines.join("\n"))
+        .map_err(|e| format!("Failed to write env file: {}", e))?;
+
     Ok(())
 }
 

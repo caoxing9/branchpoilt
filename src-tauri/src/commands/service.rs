@@ -1,6 +1,6 @@
 use tauri::{AppHandle, Manager, State, Emitter, WebviewUrl, WebviewWindowBuilder};
 
-use crate::process::manager::{self, read_env_var};
+use crate::process::manager::{self, read_env_var, extract_db_name, WorktreeEnvOverrides};
 use crate::process::port::find_available_port;
 use crate::state::{BranchEnvironment, SharedState, Status};
 use crate::watcher::file_watcher;
@@ -101,14 +101,10 @@ pub fn start_branch(
     eprintln!("[BranchPilot] start_branch: branch={}, worktree={}, backend_port={}, socket_port={}, frontend_port={}",
         branch_name, worktree_path.display(), backend_port, socket_port, frontend_port);
 
-    // Derive database name for display
-    let db_name = {
-        let safe_name = branch_name
-            .replace('/', "_")
-            .replace('-', "_")
-            .to_lowercase();
-        format!("teable_{}", safe_name)
-    };
+    // Read actual database name from env file for display
+    let db_name = manager::read_base_database_url(&worktree_path)
+        .and_then(|url| extract_db_name(&url))
+        .unwrap_or_else(|| manager::branch_to_db_name(&branch_name));
 
     // Update state — store frontend_port as the preview port
     {
@@ -187,4 +183,31 @@ pub fn open_preview_window(
         .map_err(|e| format!("Failed to create preview window: {}", e))?;
 
     Ok(())
+}
+
+#[tauri::command]
+pub fn get_worktree_env(
+    branch_name: String,
+    state: State<'_, SharedState>,
+) -> Result<WorktreeEnvOverrides, String> {
+    let repo_path = {
+        let s = state.lock().unwrap();
+        s.project_path().ok_or("No project path set")?
+    };
+    let worktree_path = find_worktree_for_branch(&repo_path, &branch_name)?;
+    Ok(manager::read_worktree_env_overrides(&worktree_path))
+}
+
+#[tauri::command]
+pub fn update_worktree_env(
+    branch_name: String,
+    overrides: WorktreeEnvOverrides,
+    state: State<'_, SharedState>,
+) -> Result<(), String> {
+    let repo_path = {
+        let s = state.lock().unwrap();
+        s.project_path().ok_or("No project path set")?
+    };
+    let worktree_path = find_worktree_for_branch(&repo_path, &branch_name)?;
+    manager::update_worktree_env_overrides(&worktree_path, &overrides)
 }

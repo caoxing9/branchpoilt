@@ -40,3 +40,23 @@ export interface WorktreeProgress {
   message: string;
   done: boolean;
 }
+
+export type DbModeType = "new" | "clone" | "reuse";
+
+export interface WorktreeEnvOverrides {
+  port: string | null;
+  socketPort: string | null;
+  serverPort: string | null;
+  publicOrigin: string | null;
+  storagePrefix: string | null;
+  prismaDatabaseUrl: string | null;
+  publicDatabaseProxy: string | null;
+  backendCacheRedisUri: string | null;
+}
+
+export interface WorktreeDbInfo {
+  branchName: string;
+  databaseName: string | null;
+  databaseUrl: string | null;
+  redisUri: string | null;
+}

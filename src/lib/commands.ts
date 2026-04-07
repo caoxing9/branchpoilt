@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Branch, BranchEnvironment, AppSettings } from "./types";
+import type { Branch, BranchEnvironment, AppSettings, DbModeType, WorktreeDbInfo, WorktreeEnvOverrides } from "./types";
 
 export async function listBranches(): Promise<Branch[]> {
   return invoke("list_branches");
@@ -37,8 +37,24 @@ export async function openPreviewWindow(branches: string[]): Promise<void> {
   return invoke("open_preview_window", { branches });
 }
 
-export async function createWorktree(branchName: string): Promise<void> {
-  return invoke("create_worktree", { branchName });
+export async function createWorktree(
+  branchName: string,
+  dbMode?: DbModeType,
+  sourceBranch?: string,
+): Promise<void> {
+  return invoke("create_worktree", { branchName, dbMode, sourceBranch });
+}
+
+export async function listWorktreeDbInfo(): Promise<WorktreeDbInfo[]> {
+  return invoke("list_worktree_db_info");
+}
+
+export async function getWorktreeEnv(branchName: string): Promise<WorktreeEnvOverrides> {
+  return invoke("get_worktree_env", { branchName });
+}
+
+export async function updateWorktreeEnv(branchName: string, overrides: WorktreeEnvOverrides): Promise<void> {
+  return invoke("update_worktree_env", { branchName, overrides });
 }
 
 export async function openInVscode(path: string): Promise<void> {

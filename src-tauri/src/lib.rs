@@ -23,6 +23,7 @@ pub fn run() {
             let state = app.state::<SharedState>();
             let mut s = state.lock().unwrap();
             s.settings = saved;
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -30,11 +31,14 @@ pub fn run() {
             commands::git::remove_worktree,
             commands::git::create_worktree,
             commands::git::open_in_vscode,
+            commands::git::list_worktree_db_info,
             commands::service::start_branch,
             commands::service::stop_branch,
             commands::service::get_environments,
             commands::service::get_branch_logs,
             commands::service::open_preview_window,
+            commands::service::get_worktree_env,
+            commands::service::update_worktree_env,
             commands::settings::get_settings,
             commands::settings::set_project_path,
         ])
