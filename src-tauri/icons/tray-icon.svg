@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44" fill="none">
+  <!-- Git branch icon for macOS menu bar (template image: black on transparent) -->
+  <g stroke="black" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <!-- Main trunk -->
+    <line x1="15" y1="8" x2="15" y2="36"/>
+    <!-- Side branch -->
+    <line x1="29" y1="8" x2="29" y2="18"/>
+    <!-- Merge curve -->
+    <path d="M29 18 C29 24, 22 28, 15 30"/>
+  </g>
+  <!-- Commit dots -->
+  <g fill="black">
+    <circle cx="15" cy="8" r="3.5"/>
+    <circle cx="15" cy="36" r="3"/>
+    <circle cx="29" cy="8" r="3.5"/>
+    <circle cx="29" cy="18" r="2.5"/>
+    <circle cx="15" cy="30" r="2.5"/>
+  </g>
+</svg>

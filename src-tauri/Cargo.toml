@@ -1,0 +1,23 @@
+[package]
+name = "branchpilot"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "branchpilot_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+git2 = "0.20"
+notify = "7"
+notify-debouncer-mini = "0.5"
+tokio = { version = "1", features = ["full"] }
+libc = "0.2.184"
