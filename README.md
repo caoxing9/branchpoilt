@@ -7,8 +7,8 @@ A lightweight macOS menubar app for managing parallel branch development environ
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 <p align="center">
-  <img src="docs/screenshot.png" width="360" alt="TeaBranch onboarding" />
   <img src="docs/screenshot-list.png" width="360" alt="TeaBranch branch list" />
+  <img src="docs/screenshot.png" width="600" alt="TeaBranch branch detail" />
 </p>
 
 ## What is TeaBranch?
