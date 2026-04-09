@@ -32,6 +32,7 @@ pub fn run() {
             commands::git::remove_worktree,
             commands::git::create_worktree,
             commands::git::open_in_vscode,
+            commands::git::open_in_terminal,
             commands::git::list_worktree_db_info,
             commands::service::start_branch,
             commands::service::stop_branch,
@@ -43,6 +44,7 @@ pub fn run() {
             commands::service::kill_branch_ports,
             commands::settings::get_settings,
             commands::settings::set_project_path,
+            commands::settings::update_settings,
         ])
         .on_window_event(|_window, _event| {})
         .build(tauri::generate_context!())

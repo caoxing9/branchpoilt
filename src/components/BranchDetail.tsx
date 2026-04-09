@@ -4,7 +4,7 @@ import type { Branch, DevCategory, WorktreeEnvOverrides, WorktreeDbInfo } from "
 import { DEV_CATEGORIES } from "../lib/types";
 import { StatusBadge } from "./StatusBadge";
 import { CategoryPicker } from "./CategoryPicker";
-import { startBranch, stopBranch, getBranchLogs, removeBranch, openInVscode, killBranchPorts, getWorktreeEnv, updateWorktreeEnv, listWorktreeDbInfo } from "../lib/commands";
+import { startBranch, stopBranch, getBranchLogs, removeBranch, openInVscode, openInTerminal, killBranchPorts, getWorktreeEnv, updateWorktreeEnv, listWorktreeDbInfo, previewUrl } from "../lib/commands";
 import { AnsiLine } from "./AnsiLine";
 
 interface BranchDetailProps {
@@ -228,6 +228,24 @@ export function BranchDetail({
           <button
             onClick={() => {
               const wt = worktreePath ?? branch.worktreePath;
+              if (wt) openInTerminal(wt);
+            }}
+            style={{
+              padding: "4px 12px",
+              background: "var(--accent-dim)",
+              color: "var(--accent)",
+              borderRadius: 6,
+              fontSize: 12,
+              transition: "all 0.15s",
+            }}
+          >
+            Terminal
+          </button>
+        )}
+        {hasWorktree && (
+          <button
+            onClick={() => {
+              const wt = worktreePath ?? branch.worktreePath;
               if (wt) openInVscode(wt);
             }}
             style={{
@@ -240,6 +258,21 @@ export function BranchDetail({
             }}
           >
             VS Code
+          </button>
+        )}
+        {status === "running" && port && (
+          <button
+            onClick={() => window.open(previewUrl(branch.name, port), "_blank")}
+            style={{
+              padding: "4px 12px",
+              background: "var(--accent-dim)",
+              color: "var(--accent)",
+              borderRadius: 6,
+              fontSize: 12,
+              transition: "all 0.15s",
+            }}
+          >
+            Preview
           </button>
         )}
         {hasWorktree && (

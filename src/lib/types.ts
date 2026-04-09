@@ -33,6 +33,7 @@ export interface AppSettings {
   projectPath: string | null;
   basePort: number;
   defaultStartCommand: string;
+  terminalApp: string | null;
 }
 
 export interface WorktreeProgress {

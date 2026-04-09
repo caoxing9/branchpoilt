@@ -4,7 +4,7 @@ import type { Branch, DevCategory } from "../lib/types";
 import { StatusBadge } from "./StatusBadge";
 import { LogViewer } from "./LogViewer";
 import { CategoryPicker } from "./CategoryPicker";
-import { startBranch, stopBranch, removeBranch, previewUrl, openInVscode } from "../lib/commands";
+import { startBranch, stopBranch, removeBranch, previewUrl, openInVscode, openInTerminal } from "../lib/commands";
 
 interface BranchCardProps {
   branch: Branch;
@@ -157,6 +157,9 @@ export function BranchCard({ branch, onRefresh, devCategory, onCategoryChange, o
           <div style={{ display: "flex", gap: 4 }}>
             {(status === "running" || status === "error") && (
               <CardBtn onClick={() => setShowLogs(!showLogs)} active={showLogs}>Logs</CardBtn>
+            )}
+            {hasWorktree && (
+              <CardBtn dim onClick={() => { const wt = env?.worktreePath || branch.worktreePath; if (wt) openInTerminal(wt); }}>Term</CardBtn>
             )}
             {hasWorktree && (
               <CardBtn dim onClick={() => { const wt = env?.worktreePath || branch.worktreePath; if (wt) openInVscode(wt); }}>Code</CardBtn>

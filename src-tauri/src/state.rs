@@ -44,6 +44,8 @@ pub struct AppSettings {
     pub project_path: Option<String>,
     pub base_port: u16,
     pub default_start_command: String,
+    #[serde(default)]
+    pub terminal_app: Option<String>,
 }
 
 impl Default for AppSettings {
@@ -52,6 +54,7 @@ impl Default for AppSettings {
             project_path: None,
             base_port: 3001,
             default_start_command: "npm run dev".to_string(),
+            terminal_app: None,
         }
     }
 }

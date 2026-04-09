@@ -34,3 +34,20 @@ pub fn set_project_path(
     let _ = app.emit("environment-updated", ());
     Ok(())
 }
+
+#[tauri::command]
+pub fn update_settings(
+    terminal_app: Option<String>,
+    app: AppHandle,
+    state: State<'_, SharedState>,
+) -> Result<(), String> {
+    let mut s = state.lock().unwrap();
+    s.settings.terminal_app = terminal_app;
+    let settings_clone = s.settings.clone();
+    drop(s);
+
+    SettingsStore::save(&app, &settings_clone)
+        .map_err(|e| format!("Failed to persist settings: {}", e))?;
+
+    Ok(())
+}

@@ -61,8 +61,16 @@ export async function killBranchPorts(branchName: string): Promise<string> {
   return invoke("kill_branch_ports", { branchName });
 }
 
+export async function updateSettings(terminalApp: string | null): Promise<void> {
+  return invoke("update_settings", { terminalApp });
+}
+
 export async function openInVscode(path: string): Promise<void> {
   return invoke("open_in_vscode", { path });
+}
+
+export async function openInTerminal(path: string): Promise<void> {
+  return invoke("open_in_terminal", { path });
 }
 
 /** Generate a preview URL using *.localhost subdomain for cookie isolation. */

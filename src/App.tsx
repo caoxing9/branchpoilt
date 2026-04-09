@@ -3,6 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { BranchList } from "./components/BranchList";
 import { Onboarding } from "./components/Onboarding";
 import { CreateWorktreeDialog } from "./components/CreateWorktreeDialog";
+import { SettingsPanel } from "./components/SettingsPanel";
 import { getSettings, setProjectPath, openPreviewWindow } from "./lib/commands";
 import { useTheme } from "./hooks/useTheme";
 
@@ -13,6 +14,7 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [, setRefreshKey] = useState(0);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const { theme, cycleTheme } = useTheme();
 
   useEffect(() => {
@@ -94,6 +96,9 @@ function App() {
           <TitleBtn onClick={cycleTheme} title={`Theme: ${theme}`}>
             {themeIcon}
           </TitleBtn>
+          <TitleBtn onClick={() => setShowSettings(true)} title="Settings">
+            &#9881;
+          </TitleBtn>
         </div>
       </div>
 
@@ -117,6 +122,10 @@ function App() {
           onClose={() => setShowCreateDialog(false)}
           onCreated={() => setRefreshKey((k) => k + 1)}
         />
+      )}
+
+      {showSettings && (
+        <SettingsPanel onClose={() => setShowSettings(false)} />
       )}
     </div>
   );

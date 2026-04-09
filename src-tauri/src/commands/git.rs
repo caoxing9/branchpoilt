@@ -98,3 +98,33 @@ pub fn open_in_vscode(path: String) -> Result<(), String> {
         .map_err(|e| format!("Failed to open VS Code: {}", e))?;
     Ok(())
 }
+
+#[tauri::command]
+pub fn open_in_terminal(path: String, state: State<'_, SharedState>) -> Result<(), String> {
+    let s = state.lock().unwrap();
+    let terminal_app = s.settings.terminal_app.clone();
+    drop(s);
+
+    let dir = std::path::Path::new(&path);
+    if !dir.exists() {
+        return Err(format!("Path does not exist: {}", path));
+    }
+
+    match terminal_app.as_deref() {
+        Some(app) => {
+            // Use `open -a <app> <path>` to open the configured terminal app
+            std::process::Command::new("open")
+                .args(["-a", app, &path])
+                .spawn()
+                .map_err(|e| format!("Failed to open {}: {}", app, e))?;
+        }
+        None => {
+            // Default: use macOS `open -a Terminal <path>`
+            std::process::Command::new("open")
+                .args(["-a", "Terminal", &path])
+                .spawn()
+                .map_err(|e| format!("Failed to open Terminal: {}", e))?;
+        }
+    }
+    Ok(())
+}
