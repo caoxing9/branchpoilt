@@ -1,31 +1,38 @@
-# BranchPilot
+# TeaBranch
 
-A lightweight macOS menubar app for managing parallel branch development environments using **Git worktrees**. Built with [Tauri 2](https://v2.tauri.app/) + React + Rust.
+A lightweight macOS menubar app for managing parallel branch development environments for [Teable](https://github.com/teableio/teable), powered by **Git worktrees**. Built with [Tauri 2](https://v2.tauri.app/) + React + Rust.
 
 ![Version](https://img.shields.io/badge/version-0.1.0-blue)
 ![Platform](https://img.shields.io/badge/platform-macOS-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-## What is BranchPilot?
+<p align="center">
+  <img src="docs/screenshot.png" width="360" alt="TeaBranch onboarding" />
+  <img src="docs/screenshot-list.png" width="360" alt="TeaBranch branch list" />
+</p>
 
-When working on multiple features or bug fixes simultaneously, switching branches constantly is painful. BranchPilot uses Git worktrees to let you run **multiple branches in parallel**, each with its own isolated dev server, port, database, and environment — all managed from a single menubar app.
+## What is TeaBranch?
+
+Teable is a complex full-stack project — when developing multiple features simultaneously, switching branches and restarting services is slow and error-prone. TeaBranch solves this by using Git worktrees to let you run **multiple branches in parallel**, each with its own isolated dev server, port, database, and environment — all managed from a single menubar app.
 
 ### Key Features
 
 - **One-click worktree creation** — Creates a Git worktree, generates isolated `.env` files, installs dependencies, and runs database migrations automatically
 - **Parallel dev servers** — Start/stop dev servers for each branch independently with automatic port allocation
-- **Live preview** — Open any running branch in the browser, or use the built-in split comparison view
+- **Live preview** — Open any running branch in the browser
 - **Swim lane board** — Organize branches into "Developing", "Todo", and "Done" categories with drag-and-drop
-- **System tray integration** — Lives in your menubar, click to toggle the window
+- **System tray integration** — Lives in your menubar with right-click menu (Show / Quit)
 - **Real-time logs** — View stdout/stderr for each branch's dev server with ANSI color support
-- **File watching** — Monitors worktree file changes and emits events
+- **Open in Terminal / VS Code** — Quickly jump into any worktree with your preferred terminal or editor
+- **Kill Ports** — Force-kill all processes on a branch's ports and reset its status
+- **Configurable terminal app** — Choose your preferred terminal (Warp, iTerm, Alacritty, etc.) from Settings
 - **Dark / Light / System theme** — Three theme modes with smooth transitions
 - **Isolated environments** — Each worktree gets its own ports, database, and Redis DB index
 
 ## Architecture
 
 ```
-branchpilot/
+teabranch/
 ├── src/                     # React frontend
 │   ├── components/
 │   │   ├── App.tsx          # Main app shell with onboarding flow
@@ -33,6 +40,7 @@ branchpilot/
 │   │   ├── BranchCard.tsx   # Individual branch card with controls
 │   │   ├── SwimLaneBoard.tsx # Kanban-style board with drag-and-drop
 │   │   ├── BranchDetail.tsx # Branch detail panel
+│   │   ├── SettingsPanel.tsx # Settings dialog (terminal app config)
 │   │   ├── LogViewer.tsx    # Real-time ANSI log viewer
 │   │   ├── PreviewFrame.tsx # Embedded iframe preview
 │   │   ├── SplitPreview.tsx # Side-by-side branch comparison
@@ -53,10 +61,10 @@ branchpilot/
 │   ├── src/
 │   │   ├── lib.rs           # Tauri app builder & plugin setup
 │   │   ├── state.rs         # App state management (settings, environments, logs)
-│   │   ├── tray.rs          # System tray icon & click handler
+│   │   ├── tray.rs          # System tray icon, menu & click handler
 │   │   ├── commands/
-│   │   │   ├── git.rs       # Branch listing, worktree create/remove
-│   │   │   ├── service.rs   # Dev server start/stop, port allocation
+│   │   │   ├── git.rs       # Branch listing, worktree create/remove, open in terminal/vscode
+│   │   │   ├── service.rs   # Dev server start/stop, port allocation, kill ports
 │   │   │   └── settings.rs  # Project path & settings persistence
 │   │   ├── git/
 │   │   │   ├── branches.rs  # Git branch enumeration via git2
@@ -128,18 +136,18 @@ The `.dmg` and `.app` bundle will be generated in `src-tauri/target/release/bund
 
 ## Usage
 
-1. **Select a project** — On first launch, pick a Git repository directory
+1. **Select a project** — On first launch, pick the Teable Git repository directory
 2. **Browse branches** — All local branches are listed with their status
-3. **Create worktree** — Click "+ Worktree" to create an isolated worktree for a branch
+3. **Create worktree** — Click "New Branch" to create an isolated worktree for a branch
 4. **Start a branch** — Click "Start" to spin up the dev server with isolated ports
-5. **Preview** — Click "Preview" to open the running branch in your browser
-6. **Compare** — Use the "Compare" button to view multiple branches side-by-side
+5. **Open in Terminal / VS Code** — Click "Term" or "Code" to jump into the worktree
+6. **Preview** — Click "Preview" to open the running branch in your browser
 7. **Organize** — Switch to board view and drag branches between "Developing", "Todo", and "Done" lanes
-8. **System tray** — Close the window; click the tray icon to bring it back
+9. **System tray** — Close the window to hide; click the tray icon to bring it back; right-click for Quit
 
 ## How Worktree Isolation Works
 
-When you create a worktree through BranchPilot, it:
+When you create a worktree through TeaBranch, it:
 
 1. **Fetches** the latest from `origin/develop`
 2. **Creates** a Git worktree in a sibling directory (`<repo>-worktree/<branch-name>`)
@@ -151,13 +159,14 @@ Each environment is fully isolated — no port conflicts, no shared databases.
 
 ## Configuration
 
-Settings are persisted to the Tauri app data directory:
+Settings are persisted to the Tauri app data directory. You can also configure the terminal app from the Settings panel (gear icon in title bar).
 
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `projectPath` | — | Root Git repository path |
 | `basePort` | `3100` | Starting port for allocation |
 | `defaultStartCommand` | `pnpm dev` | Command to start dev servers |
+| `terminalApp` | System Terminal | Preferred terminal app (Warp, iTerm, etc.) |
 
 ## Contributing
 

@@ -4,7 +4,7 @@ import { BranchList } from "./components/BranchList";
 import { Onboarding } from "./components/Onboarding";
 import { CreateWorktreeDialog } from "./components/CreateWorktreeDialog";
 import { SettingsPanel } from "./components/SettingsPanel";
-import { getSettings, setProjectPath, openPreviewWindow } from "./lib/commands";
+import { getSettings, setProjectPath } from "./lib/commands";
 import { useTheme } from "./hooks/useTheme";
 
 type AppView = "loading" | "onboarding" | "main";
@@ -35,15 +35,6 @@ function App() {
         await setProjectPath(selected as string);
         setRefreshKey((k) => k + 1);
       }
-    } catch (e) {
-      setError(String(e));
-    }
-  }
-
-  async function handleCompare() {
-    setError(null);
-    try {
-      await openPreviewWindow([]);
     } catch (e) {
       setError(String(e));
     }
@@ -90,7 +81,6 @@ function App() {
         </span>
         <div style={{ display: "flex", gap: 3, alignItems: "center", flexShrink: 0 }}>
           <TitleBtn accent onClick={() => setShowCreateDialog(true)}>New Branch</TitleBtn>
-          <TitleBtn dim onClick={handleCompare}>Compare</TitleBtn>
           <TitleBtn onClick={handleSelectProject}>Open</TitleBtn>
           <div style={{ width: 1, height: 14, background: "var(--border-strong)", margin: "0 2px" }} />
           <TitleBtn onClick={cycleTheme} title={`Theme: ${theme}`}>
