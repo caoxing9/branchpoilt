@@ -4,6 +4,7 @@ use crate::git::branches::list_local_branches;
 use crate::git::worktree::{self, DbMode};
 use crate::process::manager::{self, stop_service, WorktreeDbInfo};
 use crate::state::{Branch, SharedState};
+use crate::watcher::file_watcher;
 
 #[tauri::command]
 pub fn list_branches(state: State<'_, SharedState>) -> Result<Vec<Branch>, String> {
@@ -15,7 +16,8 @@ pub fn list_branches(state: State<'_, SharedState>) -> Result<Vec<Branch>, Strin
 
 #[tauri::command(async)]
 pub fn remove_worktree(branch_name: String, state: State<'_, SharedState>) -> Result<(), String> {
-    // Stop service first
+    // Stop file watcher and service first
+    file_watcher::stop_watching(&branch_name);
     let _ = stop_service(&state, &branch_name);
 
     let s = state.lock().unwrap();
@@ -26,6 +28,7 @@ pub fn remove_worktree(branch_name: String, state: State<'_, SharedState>) -> Re
 
     let mut s = state.lock().unwrap();
     s.environments.remove(&branch_name);
+    s.logs.remove(&branch_name);
     Ok(())
 }
 

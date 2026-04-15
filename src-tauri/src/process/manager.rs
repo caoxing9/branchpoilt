@@ -166,6 +166,18 @@ fn spawn_process(
         command.env(key, val);
     }
 
+    // Limit Node.js heap memory to prevent unbounded growth.
+    // Append to any existing NODE_OPTIONS rather than overwriting.
+    let existing_node_opts = std::env::var("NODE_OPTIONS").unwrap_or_default();
+    if !existing_node_opts.contains("--max-old-space-size") {
+        let node_opts = if existing_node_opts.is_empty() {
+            "--max-old-space-size=768".to_string()
+        } else {
+            format!("{} --max-old-space-size=768", existing_node_opts)
+        };
+        command.env("NODE_OPTIONS", node_opts);
+    }
+
     let mut child = unsafe {
         command
             .pre_exec(|| {

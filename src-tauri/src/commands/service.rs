@@ -143,7 +143,17 @@ pub fn stop_branch(
     app: AppHandle,
     state: State<'_, SharedState>,
 ) -> Result<(), String> {
+    // Stop the file watcher for this branch
+    file_watcher::stop_watching(&branch_name);
+
     manager::stop_service(&state, &branch_name)?;
+
+    // Clear in-memory logs to free memory
+    {
+        let mut s = state.lock().unwrap();
+        s.logs.remove(&branch_name);
+    }
+
     let _ = app.emit("environment-updated", ());
     Ok(())
 }
@@ -154,6 +164,9 @@ pub fn kill_branch_ports(
     app: AppHandle,
     state: State<'_, SharedState>,
 ) -> Result<String, String> {
+    // Stop file watcher for this branch
+    file_watcher::stop_watching(&branch_name);
+
     let mut s = state.lock().unwrap();
     let repo_path = s.project_path().ok_or("No project path set")?;
 
