@@ -30,6 +30,9 @@ export function BranchDetail({
   const [killResult, setKillResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [autoScroll, setAutoScroll] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [limitLogs, setLimitLogs] = useState(true);
+  const limitLogsRef = useRef(true);
   const logRef = useRef<HTMLDivElement>(null);
 
   const env = branch.environment;
@@ -92,7 +95,7 @@ export function BranchDetail({
     const unlisten = listen<string>(`branch-log:${branch.name}`, (event) => {
       setLogs((prev) => {
         const next = [...prev, event.payload];
-        return next.length > 2000 ? next.slice(-2000) : next;
+        return limitLogsRef.current && next.length > 2000 ? next.slice(-2000) : next;
       });
     });
 
@@ -671,15 +674,55 @@ export function BranchDetail({
           justifyContent: "space-between",
           borderBottom: "1px solid var(--border)",
           background: "var(--toolbar-bg)",
+          gap: 8,
         }}
       >
-        <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)" }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", flexShrink: 0 }}>
           Logs
           <span style={{ fontWeight: 400, marginLeft: 6, fontSize: 10, opacity: 0.7 }}>
-            ({logs.length} lines)
+            {searchTerm.trim()
+              ? `(${logs.filter((l) => l.toLowerCase().includes(searchTerm.trim().toLowerCase())).length}/${logs.length})`
+              : `(${logs.length})`}
           </span>
         </span>
-        <div style={{ display: "flex", gap: 6 }}>
+        <input
+          type="text"
+          placeholder="Search logs..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          style={{
+            flex: 1,
+            minWidth: 0,
+            padding: "3px 8px",
+            background: "var(--bg-card)",
+            border: "1px solid var(--border)",
+            borderRadius: 4,
+            color: "var(--text-primary)",
+            fontSize: 11,
+            fontFamily: "'SF Mono', 'Fira Code', monospace",
+            outline: "none",
+            transition: "border-color 0.15s",
+          }}
+        />
+        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+          <button
+            onClick={() => {
+              const next = !limitLogs;
+              setLimitLogs(next);
+              limitLogsRef.current = next;
+            }}
+            style={{
+              padding: "2px 6px",
+              fontSize: 10,
+              borderRadius: 4,
+              background: limitLogs ? "var(--bg-card)" : "rgba(251, 191, 36, 0.12)",
+              color: limitLogs ? "var(--text-secondary)" : "var(--status-building)",
+              border: "1px solid var(--border)",
+              transition: "all 0.15s",
+            }}
+          >
+            {limitLogs ? "2K limit" : "Unlimited"}
+          </button>
           <button
             onClick={() => setAutoScroll(!autoScroll)}
             style={{
@@ -735,24 +778,35 @@ export function BranchDetail({
             {status === "stopped" ? "Start the branch to see logs" : "Waiting for output..."}
           </div>
         ) : (
-          logs.map((line, i) => (
-            <div
-              key={i}
-              style={{
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-all",
-                color: line.includes("[backend]")
-                  ? "var(--log-backend)"
-                  : line.includes("[frontend]")
-                    ? "var(--log-frontend)"
-                    : line.includes("error") || line.includes("Error")
-                      ? "var(--log-error)"
-                      : "var(--log-text)",
-              }}
-            >
-              <AnsiLine text={line} />
-            </div>
-          ))
+          (() => {
+            const term = searchTerm.trim().toLowerCase();
+            const filtered = term ? logs.filter((l) => l.toLowerCase().includes(term)) : logs;
+            if (term && filtered.length === 0) {
+              return (
+                <div style={{ color: "var(--log-text-dim)", textAlign: "center", padding: 24 }}>
+                  No matching logs
+                </div>
+              );
+            }
+            return filtered.map((line, i) => (
+              <div
+                key={i}
+                style={{
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-all",
+                  color: line.includes("[backend]")
+                    ? "var(--log-backend)"
+                    : line.includes("[frontend]")
+                      ? "var(--log-frontend)"
+                      : line.includes("error") || line.includes("Error")
+                        ? "var(--log-error)"
+                        : "var(--log-text)",
+                }}
+              >
+                <AnsiLine text={line} />
+              </div>
+            ));
+          })()
         )}
       </div>
     </div>
