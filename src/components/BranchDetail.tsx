@@ -1,11 +1,17 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import type { Branch, DevCategory, WorktreeEnvOverrides, WorktreeDbInfo } from "../lib/types";
 import { DEV_CATEGORIES } from "../lib/types";
 import { StatusBadge } from "./StatusBadge";
 import { CategoryPicker } from "./CategoryPicker";
 import { startBranch, stopBranch, getBranchLogs, removeBranch, openInVscode, openInTerminal, killBranchPorts, getWorktreeEnv, updateWorktreeEnv, listWorktreeDbInfo, previewUrl } from "../lib/commands";
-import { AnsiLine } from "./AnsiLine";
+import { LogList } from "./LogList";
+import { useListRef } from "react-window";
+
+const ANSI_RE = /\x1b\[[0-9;]*[a-zA-Z]/g;
+function stripAnsi(s: string): string {
+  return s.replace(ANSI_RE, "");
+}
 
 interface BranchDetailProps {
   branch: Branch;
@@ -23,6 +29,7 @@ export function BranchDetail({
   onRefresh,
 }: BranchDetailProps) {
   const [logs, setLogs] = useState<string[]>([]);
+  const [logsClearedAt, setLogsClearedAt] = useState(0); // bumped to invalidate height cache
   const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -31,9 +38,12 @@ export function BranchDetail({
   const [error, setError] = useState<string | null>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [activeMatchIdx, setActiveMatchIdx] = useState(0);
+  const [copyToast, setCopyToast] = useState<string | null>(null);
   const [limitLogs, setLimitLogs] = useState(true);
   const limitLogsRef = useRef(true);
-  const logRef = useRef<HTMLDivElement>(null);
+  const listRef = useListRef(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const env = branch.environment;
   const status = env?.status ?? "stopped";
@@ -104,18 +114,110 @@ export function BranchDetail({
     };
   }, [branch.name]);
 
-  // Auto-scroll
-  useEffect(() => {
-    if (autoScroll && logRef.current) {
-      logRef.current.scrollTop = logRef.current.scrollHeight;
+  // Compute search matches across all log lines.
+  const matches = useMemo(() => {
+    const term = searchTerm.trim();
+    if (!term) return [] as Array<{ line: number; local: number }>;
+    const needle = term.toLowerCase();
+    const out: Array<{ line: number; local: number }> = [];
+    for (let i = 0; i < logs.length; i++) {
+      const visible = stripAnsi(logs[i]).toLowerCase();
+      let pos = 0;
+      let local = 0;
+      while (true) {
+        const found = visible.indexOf(needle, pos);
+        if (found === -1) break;
+        out.push({ line: i, local });
+        local += 1;
+        pos = found + Math.max(needle.length, 1);
+      }
     }
-  }, [logs, autoScroll]);
+    return out;
+  }, [logs, searchTerm]);
 
-  const handleScroll = () => {
-    if (!logRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = logRef.current;
-    setAutoScroll(scrollHeight - scrollTop - clientHeight < 40);
-  };
+  // Reset active match when search results shrink past it.
+  useEffect(() => {
+    if (activeMatchIdx >= matches.length) setActiveMatchIdx(0);
+  }, [matches.length, activeMatchIdx]);
+
+  // Jump to first match when search term changes (and turn off auto-scroll).
+  const lastSearchRef = useRef("");
+  useEffect(() => {
+    if (lastSearchRef.current === searchTerm) return;
+    lastSearchRef.current = searchTerm;
+    if (matches.length > 0) {
+      setActiveMatchIdx(0);
+      setAutoScroll(false);
+      listRef.current?.scrollToRow({ index: matches[0].line, align: "center", behavior: "auto" });
+    }
+  }, [searchTerm, matches]);
+
+  // Auto-scroll to bottom when new logs arrive (only if at bottom).
+  const lastLogCountRef = useRef(0);
+  useEffect(() => {
+    if (logs.length === 0) {
+      lastLogCountRef.current = 0;
+      return;
+    }
+    if (autoScroll && logs.length > lastLogCountRef.current) {
+      listRef.current?.scrollToRow({ index: logs.length - 1, align: "end", behavior: "auto" });
+    }
+    lastLogCountRef.current = logs.length;
+  }, [logs.length, autoScroll]);
+
+  // Update autoScroll based on what's visible.
+  const handleRowsRendered = useCallback(
+    (vis: { startIndex: number; stopIndex: number }) => {
+      if (logs.length === 0) return;
+      setAutoScroll(vis.stopIndex >= logs.length - 2);
+    },
+    [logs.length]
+  );
+
+  const goToMatch = useCallback(
+    (idx: number) => {
+      if (matches.length === 0) return;
+      const next = ((idx % matches.length) + matches.length) % matches.length;
+      setActiveMatchIdx(next);
+      setAutoScroll(false);
+      listRef.current?.scrollToRow({ index: matches[next].line, align: "center", behavior: "auto" });
+    },
+    [matches]
+  );
+
+  const handleCopyLine = useCallback((text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopyToast("Copied line");
+      setTimeout(() => setCopyToast(null), 1200);
+    }).catch(() => {});
+  }, []);
+
+  const handleCopyAll = useCallback(() => {
+    const term = searchTerm.trim().toLowerCase();
+    const lines = term
+      ? logs.filter((l) => stripAnsi(l).toLowerCase().includes(term))
+      : logs;
+    const text = lines.map(stripAnsi).join("\n");
+    navigator.clipboard.writeText(text).then(() => {
+      setCopyToast(term ? `Copied ${lines.length} matching lines` : `Copied ${lines.length} lines`);
+      setTimeout(() => setCopyToast(null), 1500);
+    }).catch(() => {});
+  }, [logs, searchTerm]);
+
+  // Cmd/Ctrl+F focuses search.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const activeMatch = matches[activeMatchIdx];
 
   async function handleToggle() {
     setLoading(true);
@@ -680,31 +782,110 @@ export function BranchDetail({
         <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", flexShrink: 0 }}>
           Logs
           <span style={{ fontWeight: 400, marginLeft: 6, fontSize: 10, opacity: 0.7 }}>
-            {searchTerm.trim()
-              ? `(${logs.filter((l) => l.toLowerCase().includes(searchTerm.trim().toLowerCase())).length}/${logs.length})`
-              : `(${logs.length})`}
+            ({logs.length})
           </span>
         </span>
-        <input
-          type="text"
-          placeholder="Search logs..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          style={{
-            flex: 1,
-            minWidth: 0,
-            padding: "3px 8px",
-            background: "var(--bg-card)",
-            border: "1px solid var(--border)",
-            borderRadius: 4,
-            color: "var(--text-primary)",
-            fontSize: 11,
-            fontFamily: "'SF Mono', 'Fira Code', monospace",
-            outline: "none",
-            transition: "border-color 0.15s",
-          }}
-        />
+        <div style={{ position: "relative", flex: 1, minWidth: 0, display: "flex", alignItems: "center" }}>
+          <input
+            ref={searchInputRef}
+            type="text"
+            placeholder="Search logs ( \u2318F )"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                goToMatch(activeMatchIdx + (e.shiftKey ? -1 : 1));
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                setSearchTerm("");
+                e.currentTarget.blur();
+              }
+            }}
+            style={{
+              flex: 1,
+              minWidth: 0,
+              padding: "3px 70px 3px 8px",
+              background: "var(--bg-card)",
+              border: "1px solid var(--border)",
+              borderRadius: 4,
+              color: "var(--text-primary)",
+              fontSize: 11,
+              fontFamily: "'SF Mono', 'Fira Code', monospace",
+              outline: "none",
+              transition: "border-color 0.15s",
+            }}
+          />
+          {searchTerm.trim() && (
+            <span
+              style={{
+                position: "absolute",
+                right: 8,
+                fontSize: 10,
+                fontFamily: "'SF Mono', monospace",
+                color: matches.length === 0 ? "var(--status-error)" : "var(--text-secondary)",
+                pointerEvents: "none",
+              }}
+            >
+              {matches.length === 0 ? "0/0" : `${activeMatchIdx + 1}/${matches.length}`}
+            </span>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+          <button
+            onClick={() => goToMatch(activeMatchIdx - 1)}
+            disabled={matches.length === 0}
+            title="Previous match (Shift+Enter)"
+            style={{
+              padding: "2px 6px",
+              fontSize: 11,
+              borderRadius: 4,
+              background: "var(--bg-card)",
+              color: matches.length === 0 ? "var(--text-secondary)" : "var(--text-primary)",
+              border: "1px solid var(--border)",
+              opacity: matches.length === 0 ? 0.4 : 1,
+              cursor: matches.length === 0 ? "default" : "pointer",
+            }}
+          >
+            {"\u2191"}
+          </button>
+          <button
+            onClick={() => goToMatch(activeMatchIdx + 1)}
+            disabled={matches.length === 0}
+            title="Next match (Enter)"
+            style={{
+              padding: "2px 6px",
+              fontSize: 11,
+              borderRadius: 4,
+              background: "var(--bg-card)",
+              color: matches.length === 0 ? "var(--text-secondary)" : "var(--text-primary)",
+              border: "1px solid var(--border)",
+              opacity: matches.length === 0 ? 0.4 : 1,
+              cursor: matches.length === 0 ? "default" : "pointer",
+            }}
+          >
+            {"\u2193"}
+          </button>
+        </div>
         <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+          <button
+            onClick={handleCopyAll}
+            disabled={logs.length === 0}
+            title={searchTerm.trim() ? "Copy matching lines" : "Copy all lines"}
+            style={{
+              padding: "2px 6px",
+              fontSize: 10,
+              borderRadius: 4,
+              background: "var(--bg-card)",
+              color: "var(--text-secondary)",
+              border: "1px solid var(--border)",
+              opacity: logs.length === 0 ? 0.4 : 1,
+              cursor: logs.length === 0 ? "default" : "pointer",
+              transition: "all 0.15s",
+            }}
+          >
+            {searchTerm.trim() ? "Copy match" : "Copy all"}
+          </button>
           <button
             onClick={() => {
               const next = !limitLogs;
@@ -738,7 +919,10 @@ export function BranchDetail({
             Auto-scroll {autoScroll ? "ON" : "OFF"}
           </button>
           <button
-            onClick={() => setLogs([])}
+            onClick={() => {
+              setLogs([]);
+              setLogsClearedAt((n) => n + 1);
+            }}
             style={{
               padding: "2px 6px",
               fontSize: 10,
@@ -755,58 +939,60 @@ export function BranchDetail({
       </div>
 
       {/* Log output */}
-      <div
-        ref={logRef}
-        onScroll={handleScroll}
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          background: "var(--log-bg)",
-          padding: "8px 10px",
-          fontFamily: "'SF Mono', 'Fira Code', monospace",
-          fontSize: 11,
-          lineHeight: 1.6,
-          color: "var(--log-text)",
-          minHeight: 0,
-          userSelect: "text",
-          WebkitUserSelect: "text",
-          cursor: "text",
-        }}
-      >
+      <div style={{ flex: 1, position: "relative", display: "flex", flexDirection: "column", minHeight: 0 }}>
         {logs.length === 0 ? (
-          <div style={{ color: "var(--log-text-dim)", textAlign: "center", padding: 24 }}>
+          <div style={{ flex: 1, background: "var(--log-bg)", color: "var(--log-text-dim)", textAlign: "center", padding: 24, fontSize: 11 }}>
             {status === "stopped" ? "Start the branch to see logs" : "Waiting for output..."}
           </div>
         ) : (
-          (() => {
-            const term = searchTerm.trim().toLowerCase();
-            const filtered = term ? logs.filter((l) => l.toLowerCase().includes(term)) : logs;
-            if (term && filtered.length === 0) {
-              return (
-                <div style={{ color: "var(--log-text-dim)", textAlign: "center", padding: 24 }}>
-                  No matching logs
-                </div>
-              );
-            }
-            return filtered.map((line, i) => (
-              <div
-                key={i}
-                style={{
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-all",
-                  color: line.includes("[backend]")
-                    ? "var(--log-backend)"
-                    : line.includes("[frontend]")
-                      ? "var(--log-frontend)"
-                      : line.includes("error") || line.includes("Error")
-                        ? "var(--log-error)"
-                        : "var(--log-text)",
-                }}
-              >
-                <AnsiLine text={line} />
-              </div>
-            ));
-          })()
+          <LogList
+            logs={logs}
+            searchTerm={searchTerm.trim()}
+            activeMatchLine={activeMatch?.line ?? -1}
+            activeMatchLocal={activeMatch?.local ?? -1}
+            onCopy={handleCopyLine}
+            listRef={listRef}
+            onRowsRendered={handleRowsRendered}
+            cacheKey={`${branch.name}:${logsClearedAt}`}
+          />
+        )}
+        {searchTerm.trim() && matches.length === 0 && logs.length > 0 && (
+          <div
+            style={{
+              position: "absolute",
+              top: 8,
+              left: "50%",
+              transform: "translateX(-50%)",
+              background: "var(--bg-card)",
+              color: "var(--text-secondary)",
+              border: "1px solid var(--border)",
+              borderRadius: 4,
+              padding: "3px 10px",
+              fontSize: 10,
+              pointerEvents: "none",
+            }}
+          >
+            No matches
+          </div>
+        )}
+        {copyToast && (
+          <div
+            style={{
+              position: "absolute",
+              bottom: 12,
+              right: 12,
+              background: "var(--accent)",
+              color: "var(--accent-on)",
+              borderRadius: 6,
+              padding: "4px 10px",
+              fontSize: 11,
+              fontWeight: 600,
+              pointerEvents: "none",
+              animation: "wt-fade-in 0.15s ease-out",
+            }}
+          >
+            {copyToast}
+          </div>
         )}
       </div>
     </div>
